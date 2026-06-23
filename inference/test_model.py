@@ -230,7 +230,7 @@ if __name__ == "__main__":
                 model_path = os.path.join(
                     base_dir,
                     f"trained_models/experiment_causal_flag-pcr_{model_path_prefix}_{n_aff}_{n_aff}_{task}",
-                    f"spatiotemporal_4_{seed}_{train_seed}",
+                    f"spatiotemporal_4_8-8-32-64_7171_{seed}_{train_seed}",
                 )
                 config["PATH_TO_DATA"] = path_to_data
                 config["BASE_DIR"] = base_dir

@@ -34,7 +34,7 @@ echo "Running test with SEEDS=${SEEDS[*]} and n_aff=5 (Fig 3 model)"
 python inference/test_model.py \
     --data_dir "$data_dir" \
     --seeds "${SEEDS[@]}" \
-    --training_seeds "${SEEDS[@]}" \
+    --training_seeds 9 \
     --n_aff 5 \
     --base_config inference/configs/test_spindles_fig3.yaml
 

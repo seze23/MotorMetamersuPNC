@@ -120,9 +120,12 @@ class SpatiotemporalNetwork(nn.Module):
         #     kernels,
         #     "".join(str(i) for i in [s_kernelsize, s_stride, t_kernelsize, t_stride]),
         # ]
+        kernels = "-".join(str(i) for i in n_skernels)
         parts_name = [
             arch_type,
-            str(nlayers)
+            str(nlayers),
+            kernels,
+            "".join(str(i) for i in [s_kernelsize, s_stride, t_kernelsize, t_stride]),
         ]
 
         # Create model directory
