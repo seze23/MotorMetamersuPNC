@@ -1,0 +1,10 @@
+*.hdf5
+*.ckpt
+trained_models/
+data/cleaned_smooth/
+data/spindles/
+data.zip
+trained_models.zip
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
