@@ -39,10 +39,10 @@ python inference/test_model.py \
     --base_config inference/configs/test_spindles_fig3.yaml
 
 # Run extended test (for rest of paper)
-SEEDS=(0 1 2 3 4)
-TRAIN_SEEDS=(0 1 2 3)
-SEEDS=(0)
-TRAIN_SEEDS=(0 1)
+SEEDS=(0 1)
+TRAIN_SEEDS=(0 1 2 9)
+#  SEEDS=(0)
+#  TRAIN_SEEDS=(0 1)
 echo "Running extended test with SEEDS=${SEEDS[*]} and n_aff=5"
 python inference/test_model.py \
     --data_dir "$data_dir" \
