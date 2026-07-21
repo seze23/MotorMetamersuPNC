@@ -147,13 +147,13 @@ try:
 
     # Ia afferents (channels 0-4)
     for ch in range(5):
-        axes[0, 0].plot(t, chunk_data[0, ch, bic_idx, :], alpha=0.6, linewidth=0.8)
-        axes[0, 1].plot(t, chunk_data[0, ch, tri_idx, :], alpha=0.6, linewidth=0.8)
+        axes[0, 0].plot(times, chunk_data[0, ch, bic_idx, :], alpha=0.6, linewidth=0.8)
+        axes[0, 1].plot(times, chunk_data[0, ch, tri_idx, :], alpha=0.6, linewidth=0.8)
 
     # II afferents (channels 5-9)
     for ch in range(5, 10):
-        axes[1, 0].plot(t, chunk_data[0, ch, bic_idx, :], alpha=0.6, linewidth=0.8)
-        axes[1, 1].plot(t, chunk_data[0, ch, tri_idx, :], alpha=0.6, linewidth=0.8)
+        axes[1, 0].plot(times, chunk_data[0, ch, bic_idx, :], alpha=0.6, linewidth=0.8)
+        axes[1, 1].plot(times, chunk_data[0, ch, tri_idx, :], alpha=0.6, linewidth=0.8)
 
     axes[0, 0].set_ylabel("BIClong Ia FR (Hz)")
     axes[0, 1].set_ylabel("TRIlat Ia FR (Hz)")
@@ -161,12 +161,12 @@ try:
     axes[1, 1].set_ylabel("TRIlat II FR (Hz)")
     axes[1, 0].set_xlabel("Time (s)")
     axes[1, 1].set_xlabel("Time (s)")
-    axes[0, 0].set_title("BIClong — type Ia")
-    axes[0, 1].set_title("TRIlat — type Ia")
-    axes[1, 0].set_title("BIClong — type II")
-    axes[1, 1].set_title("TRIlat — type II")
+    axes[0, 0].set_title("BIClong - type Ia")
+    axes[0, 1].set_title("TRIlat - type Ia")
+    axes[1, 0].set_title("BIClong - type II")
+    axes[1, 1].set_title("TRIlat - type II")
 
-    plt.suptitle("Synthetic spindle firing rates — horizontal elbow sweep", fontsize=12)
+    plt.suptitle("Horizontal Elbow Sweep Synthetic Spindle FR", fontsize=12)
     plt.tight_layout()
     fig_path = os.path.join(REPO_DIR, "dataexp/spindle_firing_rates.png")
     plt.savefig(fig_path, dpi=150)
