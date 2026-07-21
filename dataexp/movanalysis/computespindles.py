@@ -168,7 +168,7 @@ try:
 
     plt.suptitle("Horizontal Elbow Sweep Synthetic Spindle FR", fontsize=12)
     plt.tight_layout()
-    fig_path = os.path.join(REPO_DIR, "dataexp/spindle_firing_rates.png")
+    fig_path = os.path.join(REPO_DIR, "dataexp/elbow_spindle_fr.png")
     plt.savefig(fig_path, dpi=150)
     print(f"Saved firing rate plot -> {fig_path}")
 except Exception as e:
