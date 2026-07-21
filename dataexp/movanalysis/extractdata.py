@@ -1,7 +1,13 @@
 """
-Extract muscle fiber lengths using the exact method from the lab's own
-extract_flag3d_data_utils.py: equilibrateMuscles() per timepoint,
-then getFiberLength() * 1000 for mm output.
+Extract muscle fiber lengths AND joint angles from the horizontal elbow
+sweep motion file using the lab's exact method (equilibrateMuscles per
+timepoint + getFiberLength). Joint angles are read directly from the
+.mot file - no OpenSim Analyze Tool needed.
+
+Overwrites:
+  dataexp/elbow_fiber_lengths.npz  - fiber lengths (N,25) mm + joint angles (N,7) deg
+
+Old TestFull_*.sto files in newelbowtest/ are no longer used.
 
 Run on the cluster:
   cd /home/sydneyez/sydneyez/ProprioceptiveIllusions
@@ -24,17 +30,21 @@ MUSCLE_NAMES = [
     'ECRL',    'PT',      'TRIlat',   'TRIlong','TRImed'
 ]
 
-# Only 4 coordinates driven -- matches lab's convert_to_muscle_lengths exactly
+# 4 coordinates driven for muscle extraction (matches lab's convert_to_muscle_lengths)
 COORD_ORDER = ["elv_angle", "shoulder_elv", "shoulder_rot", "elbow_flexion"]
 
+# All 7 coordinates stored in labels (for FK + model input)
+COORD_LABEL_ORDER = ["elv_angle", "shoulder_elv", "shoulder_rot",
+                     "elbow_flexion", "pro_sup", "deviation", "flexion"]
+
+# --- Load model ---
 model      = osm.Model(MODEL_PATH)
 init_state = model.initSystem()
-model.equilibrateMuscles(init_state)  # initial equilibrium -- same as lab code
+model.equilibrateMuscles(init_state)
 
 muscle_set = model.getMuscles()
 coord_set  = model.getCoordinateSet()
 
-# Verify all 25 muscles exist
 print("Verifying muscles...")
 for mname in MUSCLE_NAMES:
     try:
@@ -43,48 +53,65 @@ for mname in MUSCLE_NAMES:
         raise KeyError(f"Muscle '{mname}' not found")
 print(f"All {len(MUSCLE_NAMES)} muscles found.")
 
+# --- Load motion ---
 motion      = osm.TimeSeriesTable(MOT_PATH)
 coord_names = list(motion.getColumnLabels())
 times       = np.array(motion.getIndependentColumn())
 N           = motion.getNumRows()
 print(f"Loaded motion: {N} timepoints over {times[-1]:.2f}s")
+print(f"Motion coordinates: {coord_names}")
 
+# --- Storage arrays ---
 fiber_lengths = np.zeros((N, len(MUSCLE_NAMES)), dtype=np.float32)
+joint_angles  = np.zeros((N, 7), dtype=np.float32)  # degrees
 
-print("Extracting fiber lengths (equilibrateMuscles per frame -- may take ~5 min)...")
+# --- Extraction loop ---
+print("Extracting fiber lengths (equilibrateMuscles per frame, ~5 min)...")
 for i in range(N):
     row = motion.getRowAtIndex(i)
 
-    # Set only the 4 driven coordinates -- exact match to lab's approach
-    for cname in COORD_ORDER:
-        j = coord_names.index(cname)
-        # lab converts degrees to radians: np.pi * (deg / 180)
-        # our .mot file is already in radians (inDegrees=no), so use directly
-        coord_set.get(cname).setValue(init_state, row[j])
+    # Read joint angles directly from .mot (radians) -> convert to degrees
+    for j, cname in enumerate(COORD_LABEL_ORDER):
+        joint_angles[i, j] = np.degrees(row[coord_names.index(cname)])
 
-    # This is the critical call -- solves fiber-tendon equilibrium at this pose
+    # Set 4 driven coordinates and solve equilibrium
+    for cname in COORD_ORDER:
+        coord_set.get(cname).setValue(init_state, row[coord_names.index(cname)])
     model.equilibrateMuscles(init_state)
 
+    # Extract fiber lengths (mm)
     for k, mname in enumerate(MUSCLE_NAMES):
-        fiber_lengths[i, k] = muscle_set.get(mname).getFiberLength(init_state) * 1000  # m -> mm
+        fiber_lengths[i, k] = muscle_set.get(mname).getFiberLength(init_state) * 1000
 
     if i % 200 == 0:
-        bic = fiber_lengths[i, MUSCLE_NAMES.index('BIClong')]
-        tri = fiber_lengths[i, MUSCLE_NAMES.index('TRIlat')]
-        elbow_rad = row[coord_names.index('elbow_flexion')]
-        print(f"  Frame {i:4d}/{N} | elbow={np.degrees(elbow_rad):.1f}deg | "
+        bic      = fiber_lengths[i, MUSCLE_NAMES.index('BIClong')]
+        tri      = fiber_lengths[i, MUSCLE_NAMES.index('TRIlat')]
+        elbow_deg = joint_angles[i, 3]  # elbow_flexion in degrees
+        print(f"  Frame {i:4d}/{N} | elbow={elbow_deg:.1f}deg | "
               f"BIClong={bic:.2f}mm TRIlat={tri:.2f}mm")
 
 print()
-print("Sanity check:")
+print("Sanity check - fiber lengths:")
 for mname in ['BIClong', 'BICshort', 'TRIlat', 'TRIlong']:
     idx  = MUSCLE_NAMES.index(mname)
     vals = fiber_lengths[:, idx]
     print(f"  {mname}: first={vals[0]:.3f}mm last={vals[-1]:.3f}mm std={vals.std():.4f}mm")
 
+print()
+print("Sanity check - joint angles (degrees):")
+for j, cname in enumerate(COORD_LABEL_ORDER):
+    vals = joint_angles[:, j]
+    print(f"  {cname}: first={vals[0]:.2f} last={vals[-1]:.2f} "
+          f"min={vals.min():.2f} max={vals.max():.2f}")
+
+# --- Save ---
 np.savez(OUTPUT_NPZ,
          times=times,
-         fiber_lengths=fiber_lengths,   # (N, 25) mm, getFiberLength * 1000
+         fiber_lengths=fiber_lengths,          # (N, 25) mm
+         joint_angles=joint_angles,            # (N, 7) degrees
+         coord_names=np.array(COORD_LABEL_ORDER),
          muscle_names=np.array(MUSCLE_NAMES))
 
 print(f"\nSaved {OUTPUT_NPZ}")
+print("joint_angles columns:", COORD_LABEL_ORDER)
+print("No .sto files needed everything is in this .npz")
