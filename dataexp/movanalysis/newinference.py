@@ -184,79 +184,100 @@ print(f"  Mean L2 distance:         {mean_l2:.3f} cm")
 print(f"  Max L2 distance:          {max_l2:.3f} cm")
 print("="*50)
 
-# ------------------------------------------------------------------------------
-# 6. Figure A: 2D XZ trajectory (Y flattened)
-# ------------------------------------------------------------------------------
+# ============================================================
+# FIGURE A: 7-panel time series
+# ============================================================
+BLACK   = "#1a1a1a"
+CRIMSON = "#c0392b"
+ORANGE  = "#e67e22"
+
+plot_cols = [
+    (true[:, 4], pred[:, 4], "Shoulder elevation (deg)", sh_elv_rmse),
+    (true[:, 5], pred[:, 5], "Shoulder rotation (deg)",  sh_rot_rmse),
+    (true[:, 6], pred[:, 6], "Elbow flexion (deg)",      elbow_rmse),
+    (true[:, 0], pred[:, 0], "Wrist X (cm)", np.sqrt(np.mean((pred[:,0]-true[:,0])**2))),
+    (true[:, 1], pred[:, 1], "Wrist Y (cm)", np.sqrt(np.mean((pred[:,1]-true[:,1])**2))),
+    (true[:, 2], pred[:, 2], "Wrist Z (cm)", np.sqrt(np.mean((pred[:,2]-true[:,2])**2))),
+]
+
+fig2, axes = plt.subplots(7, 1, figsize=(11, 20), sharex=True,
+                          gridspec_kw={"hspace": 0.45})
+
+for ax, (true_vals, pred_vals, ylabel, col_rmse) in zip(axes[:6], plot_cols):
+    ax.plot(t, true_vals, c=BLACK,   linewidth=1.8, label="Ground truth", zorder=3)
+    ax.plot(t, pred_vals, c=CRIMSON, linewidth=1.5, linestyle="--", label="Predicted", zorder=2)
+    ax.set_ylabel(ylabel, fontsize=9, labelpad=4)
+    ax.text(0.01, 0.93, f"RMSE: {col_rmse:.3f}",
+            transform=ax.transAxes, fontsize=8, va='top', color='dimgray',
+            bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1))
+    ax.legend(fontsize=8, loc="upper right", framealpha=0.7)
+    ax.spines[['top','right']].set_visible(False)
+    ax.tick_params(labelsize=8)
+
+axes[6].fill_between(t, 0, l2_per_timepoint, color=ORANGE, alpha=0.25)
+axes[6].plot(t, l2_per_timepoint, c=ORANGE, linewidth=1.5, zorder=3)
+axes[6].axhline(mean_l2, c=ORANGE, linewidth=1.2, linestyle="--", alpha=0.9,
+                label=f"Mean: {mean_l2:.2f} cm")
+axes[6].set_ylabel("Wrist L2\ndistance (cm)", fontsize=9, labelpad=4)
+axes[6].set_xlabel("Time (s)", fontsize=10)
+axes[6].legend(fontsize=8, loc="upper right", framealpha=0.7)
+axes[6].spines[['top','right']].set_visible(False)
+axes[6].tick_params(labelsize=8)
+
+fig2.suptitle(
+    f"Horizontal elbow sweep prediction vs. ground truth\n"
+    f"sh_elv RMSE {sh_elv_rmse:.2f}°   sh_rot RMSE {sh_rot_rmse:.2f}°   "
+    f"elbow RMSE {elbow_rmse:.2f}°   wrist RMSE {wrist_rmse:.2f} cm   "
+    f"mean L2 {mean_l2:.2f} cm",
+    fontsize=10, y=1.00
+)
+plt.tight_layout()
+plt.savefig(os.path.join(SAVE_DIR, "pred_vs_truth_final.png"),
+            dpi=150, bbox_inches="tight")
+print("Saved pred_vs_truth_final.png")
+plt.close()
+
+# ============================================================
+# FIGURE B: XZ trajectory comparison
+# ============================================================
 from matplotlib.colors import Normalize
 
-fig, ax = plt.subplots(figsize=(7, 6))
-cmap   = plt.cm.plasma
-norm   = Normalize(vmin=0, vmax=TIME_STEPS)
-alphas = np.linspace(0.3, 1, TIME_STEPS)
-colors = [(cmap(norm(i))[0], cmap(norm(i))[1], cmap(norm(i))[2], alphas[i])
-          for i in range(TIME_STEPS)]
+fig3, ax3 = plt.subplots(figsize=(7, 6))
 
-ax.scatter(true[:, 0], true[:, 2], c=colors, s=15, label="Ground truth", zorder=3)
-ax.scatter(true[0, 0],  true[0, 2],  c='black', s=80, zorder=5, marker='o', label="Start")
-ax.scatter(true[-1, 0], true[-1, 2], c='black', s=80, zorder=5, marker='s', label="End")
-ax.scatter(pred[:, 0], pred[:, 2], c='crimson', s=8, alpha=0.5, label="Predicted", zorder=2)
+N    = len(t)
+cmap = plt.cm.viridis
+norm = Normalize(vmin=0, vmax=N-1)
 
-ax.set_xlabel("X (cm) — lateral", fontsize=11)
-ax.set_ylabel("Z (cm) — anterior/posterior", fontsize=11)
-ax.set_title("Wrist XZ plane", fontsize=11)
-ax.legend(fontsize=9)
-ax.grid(True, alpha=0.3)
-ax.set_aspect('equal')
+for i in range(N-1):
+    ax3.plot(true[:, 0][i:i+2], true[:, 2][i:i+2],
+             c=cmap(norm(i)), linewidth=2.5, solid_capstyle='round', zorder=3)
+
+ax3.scatter(true[0, 0],  true[0, 2],  c='#27ae60', s=100, zorder=5,
+            marker='o', label="Start", edgecolors='black', linewidth=0.8)
+ax3.scatter(true[-1, 0], true[-1, 2], c='#8e44ad', s=100, zorder=5,
+            marker='s', label="End",   edgecolors='black', linewidth=0.8)
+
+ax3.plot(pred[:, 0], pred[:, 2], c="#c0392b", linewidth=1.5,
+         linestyle="--", alpha=0.85, label="Predicted", zorder=2)
 
 sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
-cbar = plt.colorbar(sm, ax=ax, shrink=0.7, pad=0.02)
-cbar.set_label("Time", fontsize=8)
-cbar.set_ticks([0, TIME_STEPS//2, TIME_STEPS])
+cbar = fig3.colorbar(sm, ax=ax3, shrink=0.7, pad=0.02)
+cbar.set_label("Time", fontsize=9)
+cbar.set_ticks([0, N//2, N-1])
 cbar.set_ticklabels(["0s", "2.4s", "4.8s"])
 
+ax3.set_xlabel("X (cm)", fontsize=11)
+ax3.set_ylabel("Z (cm)", fontsize=11)
+ax3.set_title("Wrist XZ plane", fontsize=11)
+ax3.legend(fontsize=9, loc="lower right")
+ax3.grid(True, alpha=0.25, linewidth=0.5)
+ax3.set_aspect('equal')
+ax3.spines[['top','right']].set_visible(False)
+ax3.tick_params(labelsize=9)
+
 plt.tight_layout()
-plt.savefig(os.path.join(SAVE_DIR, "traj_xz_comparison.png"), dpi=150)
-print(f"Saved traj_xz_comparison.png")
-
-# ------------------------------------------------------------------------------
-# 7. Figure B: 7-panel time series (clean single figure)
-# ------------------------------------------------------------------------------
-plot_cols = [
-    (4, "Shoulder elevation (deg)"),
-    (5, "Shoulder rotation (deg)"),
-    (6, "Elbow flexion (deg)"),
-    (0, "Wrist X (cm)"),
-    (1, "Wrist Y (cm)"),
-    (2, "Wrist Z (cm)"),
-]
-
-fig2, axes = plt.subplots(7, 1, figsize=(10, 18), sharex=True)
-
-for i, (ax, (col_idx, col_name)) in enumerate(zip(axes[:6], plot_cols)):
-    rmse = np.sqrt(np.mean((pred[:, col_idx] - true[:, col_idx])**2))
-    ax.plot(t, true[:, col_idx], c="black",   label="Ground truth", linewidth=1.5)
-    ax.plot(t, pred[:, col_idx], c="crimson", label="Predicted",    linewidth=1.5, linestyle="--")
-    ax.set_ylabel(col_name, fontsize=9)
-    ax.set_title(f"RMSE: {rmse:.3f}", fontsize=8, loc="left", pad=2)
-    ax.legend(fontsize=8, loc="upper right")
-
-# L2 distance panel
-axes[6].plot(t, l2_per_timepoint, c="darkorange", linewidth=1.5)
-axes[6].axhline(mean_l2, c="darkorange", linewidth=1, linestyle="--", alpha=0.7,
-                label=f"Mean: {mean_l2:.2f} cm")
-axes[6].set_ylabel("L2 distance (cm)", fontsize=9)
-axes[6].set_xlabel("Time (s)", fontsize=9)
-axes[6].set_title("Wrist spatial error per timepoint", fontsize=8, loc="left", pad=2)
-axes[6].legend(fontsize=8)
-
-fig2.suptitle(
-    f"Horizontal elbow sweep prediction vs. truth\n"
-    f"sh_elv RMSE: {sh_elv_rmse:.2f}°  |  sh_rot RMSE: {sh_rot_rmse:.2f}°  |  "
-    f"elbow RMSE: {elbow_rmse:.2f}°  |  wrist RMSE: {wrist_rmse:.2f} cm  |  "
-    f"mean L2: {mean_l2:.2f} cm",
-    fontsize=10
-)
-plt.tight_layout()
-plt.savefig(os.path.join(SAVE_DIR, "pred_vs_truth_final.png"), dpi=150, bbox_inches="tight")
-print("Saved pred_vs_truth_final.png")
+plt.savefig(os.path.join(SAVE_DIR, "traj_xz_comparison.png"),
+            dpi=150, bbox_inches="tight")
+print("Saved traj_xz_comparison.png")
+plt.close()
