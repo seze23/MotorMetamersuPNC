@@ -43,27 +43,26 @@ MODEL_PATH = os.path.join(
 TIME_STEPS  = 1152
 SAMPLE_RATE = 240
 
-# Updated direction names matching monkey-delta generator
 DIRECTIONS_ORDERED = [
-    "0_forward", "45_fwd_left", "90_left", "135_back_left",
-    "180_backward", "225_back_right", "270_right", "315_fwd_right",
+    "0_right", "45_fwd_right", "90_forward", "135_fwd_left",
+    "180_left", "225_back_left", "270_backward", "315_back_right",
 ]
 DIR_COLORS = {
-    "0_forward":      "#e74c3c",   # red
-    "45_fwd_left":    "#e67e22",   # orange
-    "90_left":        "#f1c40f",   # yellow
-    "135_back_left":  "#2ecc71",   # green
-    "180_backward":   "#1abc9c",   # teal
-    "225_back_right": "#3498db",   # blue
-    "270_right":      "#9b59b6",   # purple
-    "315_fwd_right":  "#e91e63",   # pink
+    "0_right":       "#e74c3c",
+    "45_fwd_right":  "#e67e22",
+    "90_forward":    "#f1c40f",
+    "135_fwd_left":  "#2ecc71",
+    "180_left":      "#1abc9c",
+    "225_back_left": "#3498db",
+    "270_backward":  "#9b59b6",
+    "315_back_right":"#e91e63",
 }
 
 BLACK   = "#1a1a1a"
 CRIMSON = "#c0392b"
 ORANGE  = "#e67e22"
 
-# --- Load model once ---
+# Load model once
 print("Loading pretrained model...")
 with open(os.path.join(MODEL_PATH, "config.yaml"), "r") as f:
     model_config = yaml.load(f, Loader=yaml.FullLoader)
@@ -73,8 +72,7 @@ print("Model config loaded.")
 spindle_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "center_out_*_spindles.npz")))
 if not spindle_files:
     raise FileNotFoundError(
-        f"No *_spindles.npz files in {CENTEROUT_DIR} -- "
-        "run computefrcenterout.py first"
+        f"No *_spindles.npz files in {CENTEROUT_DIR}"
     )
 
 print(f"Found {len(spindle_files)} directions:")
@@ -93,12 +91,12 @@ for sp_path in spindle_files:
                  .replace("_spindles.npz", ""))
     print(f"Running inference: {direction}")
 
-    # --- Load data ---
+    # Load data
     sp_data      = np.load(sp_path, allow_pickle=True)
     chunk_data   = sp_data['firing_rates'].astype(np.float32)  # (1,10,25,1152)
     joint_angles = sp_data['joint_angles']                     # (1152,7) degrees
 
-    # --- Build labels via FK ---
+    # Build labels via FK
     # get_shoulder_elbow_wrist_loc indexes columns 3,4,5,6
     labels_for_fk = np.zeros((TIME_STEPS, 7), dtype=np.float32)
     labels_for_fk[:, 3] = joint_angles[:, 0]  # elv_angle
@@ -115,7 +113,7 @@ for sp_path in spindle_files:
     labels[0, :, 5]   = joint_angles[:, 2]
     labels[0, :, 6]   = joint_angles[:, 3]
 
-    # --- Write temp HDF5 and run inference ---
+    # Write temp HDF5 and run inference
     tmp_hdf5 = os.path.join(CENTEROUT_DIR, f"_tmp_{direction}.hdf5")
     with h5py.File(tmp_hdf5, "w") as f:
         f.create_dataset("data",   data=chunk_data)
@@ -142,7 +140,7 @@ for sp_path in spindle_files:
     true = labels[0]                               # (1152,7)
     os.remove(tmp_hdf5)
 
-    # --- Metrics ---
+    # Metrics
     l2          = np.sqrt(np.sum((pred[:, :3] - true[:, :3])**2, axis=1))
     sh_elv_rmse = np.sqrt(np.mean((pred[:, 4] - true[:, 4])**2))
     sh_rot_rmse = np.sqrt(np.mean((pred[:, 5] - true[:, 5])**2))
@@ -162,7 +160,7 @@ for sp_path in spindle_files:
     all_true_xyz[direction] = true[:, :3]
     all_pred_xyz[direction] = pred[:, :3]
 
-    # --- Per-direction CSV ---
+    # Per-direction CSV
     pd.DataFrame({
         "time_s":                  t,
         "true_wrist_X_cm":         true[:, 0],
@@ -180,7 +178,7 @@ for sp_path in spindle_files:
         "l2_distance_cm":          l2,
     }).to_csv(os.path.join(CENTEROUT_DIR, f"results_{direction}.csv"), index=False)
 
-    # --- Per-direction 7-panel time series ---
+    # Per-direction 7-panel time series
     plot_cols = [
         (true[:, 4], pred[:, 4], "Shoulder elevation (deg)", sh_elv_rmse),
         (true[:, 5], pred[:, 5], "Shoulder rotation (deg)",  sh_rot_rmse),
@@ -231,31 +229,43 @@ for sp_path in spindle_files:
     print()
 
 # ============================================================
-# PANEL B: side-by-side XY plane (their horizontal plane)
-# their X = lateral, their Y = anterior/posterior
+# PANEL B: side-by-side XY plane, reach phase only, centered
 # ============================================================
+REACH_START = 396
+REACH_END   = 756   # 396 + 120 reach + 120 hold + 120 return
+
 fig2, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
-                                         sharey=True, sharex=False)
+                                         sharey=True, sharex=True)
 
 for direction in DIRECTIONS_ORDERED:
     if direction not in all_true_xyz:
         continue
-    color    = DIR_COLORS.get(direction, "gray")
-    true_xyz = all_true_xyz[direction]
-    pred_xyz = all_pred_xyz[direction]
+    color = DIR_COLORS.get(direction, "gray")
 
-    # Plot XY -- their horizontal plane
-    ax_true.plot(true_xyz[:, 0], true_xyz[:, 1], c=color,
+    # Trim to reach phase
+    true_xyz = all_true_xyz[direction][REACH_START:REACH_END]
+    pred_xyz = all_pred_xyz[direction][REACH_START:REACH_END]
+
+    # Center at start of reach (common origin for all directions)
+    true_rel = true_xyz - all_true_xyz[direction][REACH_START]
+    pred_rel = pred_xyz - all_pred_xyz[direction][REACH_START]
+
+    ax_true.plot(true_rel[:, 0], true_rel[:, 1], c=color,
                  linewidth=2.0, alpha=0.85, label=direction.replace("_", " "))
-    ax_true.scatter(true_xyz[0, 0], true_xyz[0, 1], c=color, s=50, zorder=5,
+    ax_true.scatter(0, 0, c=color, s=40, zorder=5,
                     marker='o', edgecolors='black', linewidth=0.5)
 
-    ax_pred.plot(pred_xyz[:, 0], pred_xyz[:, 1], c=color,
+    ax_pred.plot(pred_rel[:, 0], pred_rel[:, 1], c=color,
                  linewidth=2.0, alpha=0.85, linestyle="--")
-    ax_pred.scatter(pred_xyz[0, 0], pred_xyz[0, 1], c=color, s=50, zorder=5,
+    ax_pred.scatter(pred_rel[0, 0], pred_rel[0, 1], c=color, s=40, zorder=5,
                     marker='o', edgecolors='black', linewidth=0.5)
 
-for ax, title in [(ax_true, "Ground truth"), (ax_pred, "Predicted")]:
+# Draw origin cross on both panels
+for ax in [ax_true, ax_pred]:
+    ax.axhline(0, c='black', linewidth=0.5, alpha=0.3)
+    ax.axvline(0, c='black', linewidth=0.5, alpha=0.3)
+
+for ax, title in [(ax_true, "Truth"), (ax_pred, "Predicted")]:
     ax.set_xlabel("X (cm)", fontsize=11)
     ax.set_title(title, fontsize=13)
     ax.grid(True, alpha=0.2, linewidth=0.5)
@@ -267,6 +277,10 @@ ax_true.set_ylabel("Y (cm)", fontsize=11)
 ax_true.legend(fontsize=7, loc="lower right", ncol=2, framealpha=0.7,
                title="Direction", title_fontsize=8)
 
+fig2.suptitle(
+    "Center-out reach trajectories\n",
+    fontsize=10, y=1.02
+)
 plt.tight_layout()
 plt.savefig(os.path.join(CENTEROUT_DIR, "panel_b_trajectories.png"),
             dpi=150, bbox_inches="tight")

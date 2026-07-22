@@ -49,7 +49,7 @@ times = np.linspace(0, DURATION, N_TOTAL)
 # Rest posture confirmed visually in OpenSim as natural KINARM horizontal position
 # Literature: KINARM shoulder abducted ~85deg humerothoracic, elbow ~90deg
 # In MoBL-ARMS: nearest in-distribution representation
-REST = dict(elv_angle=10.0, shoulder_elv=35.0, shoulder_rot=25.0,
+REST = dict(elv_angle=20.0, shoulder_elv=35.0, shoulder_rot=25.0,
             elbow_flexion=85.0)
 
 labels_rest = np.zeros((1, 7), dtype=np.float32)
@@ -75,14 +75,14 @@ print()
 REACH_CM = 10.0  # standard KINARM VGR reach amplitude
 
 DIRECTION_NAMES = {
-    0:   "0_forward",
-    45:  "45_fwd_left",
-    90:  "90_left",
-    135: "135_back_left",
-    180: "180_backward",
-    225: "225_back_right",
-    270: "270_right",
-    315: "315_fwd_right",
+    0:   "0_right",
+    45:  "45_fwd_right",
+    90:  "90_forward",
+    135: "135_fwd_left",
+    180: "180_left",
+    225: "225_back_left",
+    270: "270_backward",
+    315: "315_back_right",
 }
 
 def min_jerk(n):
