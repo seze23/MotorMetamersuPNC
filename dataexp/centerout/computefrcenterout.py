@@ -2,7 +2,7 @@
 Compute synthetic spindle firing rates for all center-out directions.
 Reads center_out_<direction>.npz, writes:
   center_out_<direction>_spindles.npz
-  spindles_<direction>.png  (Ia + II firing rates for BIClong and TRIlat)
+  spindles_<direction>.png  (Ia + II for BIClong, TRIlat, DELT1)
 
 Run:
   cd /home/sydneyez/sydneyez/ProprioceptiveIllusions
@@ -39,8 +39,12 @@ MUSCLE_NAMES = [
     'ECRL',    'PT',      'TRIlat',   'TRIlong','TRImed'
 ]
 
-BIC_IDX = MUSCLE_NAMES.index('BIClong')
-TRI_IDX = MUSCLE_NAMES.index('TRIlat')
+# Muscles to plot - BIClong (elbow flexor), TRIlat (elbow extensor), DELT1 (shoulder)
+PLOT_MUSCLES = {
+    'BIClong': MUSCLE_NAMES.index('BIClong'),
+    'TRIlat':  MUSCLE_NAMES.index('TRIlat'),
+    'DELT1':   MUSCLE_NAMES.index('DELT1'),
+}
 
 # Load config and coefficients once
 with open(CONFIG_PATH) as f:
@@ -83,9 +87,12 @@ for npz_path in npz_files:
     print(f"Processing: {direction}")
 
     d             = np.load(npz_path, allow_pickle=True)
-    fiber_lengths = d['fiber_lengths']   # (1152, 25) mm
-    joint_angles  = d['joint_angles']    # (1152, 7) degrees
+    fiber_lengths = d['fiber_lengths']    # (1152, 25) mm
+    joint_angles  = d['joint_angles']     # (1152, 7) degrees
     times         = d['times']
+    # Pass through wrist/elbow world positions for inference script
+    wrist_xyz_world = d['wrist_xyz_world'] if 'wrist_xyz_world' in d else None
+    elbow_xyz_world = d['elbow_xyz_world'] if 'elbow_xyz_world' in d else None
 
     fl_mm   = fiber_lengths.T[np.newaxis, :, :].astype(np.float32)  # (1,25,1152)
     vel_raw = np.gradient(fl_mm, dt, axis=2)
@@ -99,10 +106,9 @@ for npz_path in npz_files:
     print(f"  lengths: {fl_mm.min():.1f}->{fl_mm.max():.1f} mm  "
           f"vel: {vel.min():.1f}->{vel.max():.1f} mm/s")
 
-    # Flag velocity outlier (9_left issue)
     if np.abs(vel).max() > 500:
-        print(f"  WARNING: extreme velocity detected ({np.abs(vel).max():.0f} mm/s) "
-              f"-- {direction} may be outside EF3D training distribution")
+        print(f"  WARNING: extreme velocity ({np.abs(vel).max():.0f} mm/s) "
+              f"- {direction} may be outside EF3D training distribution")
 
     data       = normalize(fl_mm, vel, acc, config["optimal_lengths"])
     chunk_data = process_chunk(data, coefficients, num_coefficients, muscles,
@@ -112,38 +118,39 @@ for npz_path in npz_files:
     print(f"  firing rates: {chunk_data.min():.1f}->{chunk_data.max():.1f} Hz  "
           f"shape: {chunk_data.shape}")
 
-    # Save spindle npz
-    np.savez(out_npz,
-             times=times,
-             firing_rates=chunk_data,
-             joint_angles=joint_angles,
-             direction=direction)
+    # Save spindle npz -- include wrist/elbow positions for downstream use
+    save_kwargs = dict(
+        times=times,
+        firing_rates=chunk_data,
+        joint_angles=joint_angles,
+        direction=direction,
+    )
+    if wrist_xyz_world is not None:
+        save_kwargs['wrist_xyz_world'] = wrist_xyz_world
+    if elbow_xyz_world is not None:
+        save_kwargs['elbow_xyz_world'] = elbow_xyz_world
+    np.savez(out_npz, **save_kwargs)
     print(f"  Saved {os.path.basename(out_npz)}")
 
-    # --- Spindle firing rate figure ---
-    t_plot = np.arange(chunk_data.shape[3]) / SAMPLE_RATE
+    # --- Spindle firing rate figure: 2 rows x 3 muscles ---
+    t_plot    = np.arange(chunk_data.shape[3]) / SAMPLE_RATE
+    n_muscles = len(PLOT_MUSCLES)
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 7), sharex=True,
-                             gridspec_kw={"hspace": 0.35, "wspace": 0.25})
+    fig, axes = plt.subplots(2, n_muscles, figsize=(5*n_muscles, 7), sharex=True,
+                             gridspec_kw={"hspace": 0.35, "wspace": 0.3})
 
-    for ch in range(5):
-        axes[0, 0].plot(t_plot, chunk_data[0, ch,   BIC_IDX, :],
-                        c=ia_colors[ch], alpha=0.8, linewidth=0.9)
-        axes[0, 1].plot(t_plot, chunk_data[0, ch,   TRI_IDX, :],
-                        c=ia_colors[ch], alpha=0.8, linewidth=0.9)
-        axes[1, 0].plot(t_plot, chunk_data[0, ch+5, BIC_IDX, :],
-                        c=ii_colors[ch], alpha=0.8, linewidth=0.9)
-        axes[1, 1].plot(t_plot, chunk_data[0, ch+5, TRI_IDX, :],
-                        c=ii_colors[ch], alpha=0.8, linewidth=0.9)
+    for col, (mname, midx) in enumerate(PLOT_MUSCLES.items()):
+        for ch in range(5):
+            axes[0, col].plot(t_plot, chunk_data[0, ch,   midx, :],
+                              c=ia_colors[ch], alpha=0.8, linewidth=0.9)
+            axes[1, col].plot(t_plot, chunk_data[0, ch+5, midx, :],
+                              c=ii_colors[ch], alpha=0.8, linewidth=0.9)
+        axes[0, col].set_title(f"{mname} (Ia)", fontsize=10)
+        axes[1, col].set_title(f"{mname} (II)", fontsize=10)
+        axes[1, col].set_xlabel("Time (s)", fontsize=9)
 
     axes[0, 0].set_ylabel("Firing rate (Hz)", fontsize=9)
     axes[1, 0].set_ylabel("Firing rate (Hz)", fontsize=9)
-    axes[1, 0].set_xlabel("Time (s)", fontsize=9)
-    axes[1, 1].set_xlabel("Time (s)", fontsize=9)
-    axes[0, 0].set_title("BIClong (Ia)", fontsize=10)
-    axes[0, 1].set_title("TRIlat (Ia)",  fontsize=10)
-    axes[1, 0].set_title("BIClong (II)", fontsize=10)
-    axes[1, 1].set_title("TRIlat (II)",  fontsize=10)
 
     for ax in axes.flat:
         ax.spines[['top','right']].set_visible(False)
@@ -154,10 +161,10 @@ for npz_path in npz_files:
     axes[0, 0].legend(handles=handles, fontsize=7, loc="upper right", framealpha=0.7)
 
     fig.suptitle(
-        f"Center-out: {direction.replace('_',' ')} spindle FR\n"
+        f"Center-out: {direction.replace('_',' ')} - Spindle FR\n"
         f"peak vel: {np.abs(vel).max():.0f} mm/s   "
         f"FR range: {chunk_data.min():.1f}–{chunk_data.max():.1f} Hz",
-        fontsize=10, y=1.01
+        fontsize=10, y=1.02
     )
     plt.tight_layout()
     plt.savefig(out_png, dpi=150, bbox_inches="tight")

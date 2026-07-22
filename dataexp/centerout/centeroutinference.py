@@ -2,8 +2,7 @@
 Run inference for all center-out reaches and produce:
   1. Per-direction CSV (timepoint-level predictions + L2)
   2. Per-direction pred_vs_truth time series PNG
-  3. Side-by-side panel B style figure: truth vs predicted trajectories
-     all 8 directions in matched colors, XZ plane (Y flattened)
+  3. Panel B style figure: truth vs predicted in their XY horizontal plane
   4. Terminal summary table
 
 Run:
@@ -44,56 +43,63 @@ MODEL_PATH = os.path.join(
 TIME_STEPS  = 1152
 SAMPLE_RATE = 240
 
-# Direction display order and colors -- 8 directions, each unique color
+# Updated direction names matching monkey-delta generator
 DIRECTIONS_ORDERED = [
-    "12_forward", "1_fwd_right", "2_right_fwd", "3_right",
-    "10_fwd_left", "11_left_fwd", "9_left", "6_backward"
+    "0_right", "45_fwd_right", "90_forward", "135_fwd_left",
+    "180_left", "225_back_left", "270_backward", "315_back_right",
 ]
 DIR_COLORS = {
-    "12_forward":   "#e74c3c",   # red
-    "1_fwd_right":  "#e67e22",   # orange
-    "2_right_fwd":  "#f1c40f",   # yellow
-    "3_right":      "#2ecc71",   # green
-    "10_fwd_left":  "#1abc9c",   # teal
-    "11_left_fwd":  "#3498db",   # blue
-    "9_left":       "#9b59b6",   # purple
-    "6_backward":   "#e91e63",   # pink
+    "0_right":        "#e74c3c",
+    "45_fwd_right":   "#e67e22",
+    "90_forward":     "#f1c40f",
+    "135_fwd_left":   "#2ecc71",
+    "180_left":       "#1abc9c",
+    "225_back_left":  "#3498db",
+    "270_backward":   "#9b59b6",
+    "315_back_right": "#e91e63",
 }
 
-# Load model once
+BLACK   = "#1a1a1a"
+CRIMSON = "#c0392b"
+ORANGE  = "#e67e22"
+
+# --- Load model once ---
 print("Loading pretrained model...")
 with open(os.path.join(MODEL_PATH, "config.yaml"), "r") as f:
     model_config = yaml.load(f, Loader=yaml.FullLoader)
 model_config = {k: parse_config_value(v) for k, v in model_config.items()}
 print("Model config loaded.")
 
-# Find spindle files
 spindle_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "center_out_*_spindles.npz")))
 if not spindle_files:
-    raise FileNotFoundError(f"No *_spindles.npz files in {CENTEROUT_DIR} -- run compute_spindles_centerout.py first")
+    raise FileNotFoundError(
+        f"No *_spindles.npz files in {CENTEROUT_DIR} -- "
+        "run computefrcenterout.py first"
+    )
 
 print(f"Found {len(spindle_files)} directions:")
 for f in spindle_files:
     print(f"  {os.path.basename(f)}")
 print()
 
-# Storage for panel B figure
 all_true_xyz = {}
 all_pred_xyz = {}
 summary_rows = []
-
 t = np.arange(TIME_STEPS) / SAMPLE_RATE
 
 for sp_path in spindle_files:
-    direction = os.path.basename(sp_path).replace("center_out_","").replace("_spindles.npz","")
+    direction = (os.path.basename(sp_path)
+                 .replace("center_out_", "")
+                 .replace("_spindles.npz", ""))
     print(f"Running inference: {direction}")
 
-    # Load spindle firing rates + joint angles
-    sp_data    = np.load(sp_path, allow_pickle=True)
-    chunk_data = sp_data['firing_rates'].astype(np.float32)  # (1,10,25,1152)
-    joint_angles = sp_data['joint_angles']                   # (1152,7) degrees
+    # --- Load data ---
+    sp_data      = np.load(sp_path, allow_pickle=True)
+    chunk_data   = sp_data['firing_rates'].astype(np.float32)  # (1,10,25,1152)
+    joint_angles = sp_data['joint_angles']                     # (1152,7) degrees
 
-    # Build labels
+    # --- Build labels via FK ---
+    # get_shoulder_elbow_wrist_loc indexes columns 3,4,5,6
     labels_for_fk = np.zeros((TIME_STEPS, 7), dtype=np.float32)
     labels_for_fk[:, 3] = joint_angles[:, 0]  # elv_angle
     labels_for_fk[:, 4] = joint_angles[:, 1]  # shoulder_elv
@@ -109,7 +115,7 @@ for sp_path in spindle_files:
     labels[0, :, 5]   = joint_angles[:, 2]
     labels[0, :, 6]   = joint_angles[:, 3]
 
-    # Write temp HDF5
+    # --- Write temp HDF5 and run inference ---
     tmp_hdf5 = os.path.join(CENTEROUT_DIR, f"_tmp_{direction}.hdf5")
     with h5py.File(tmp_hdf5, "w") as f:
         f.create_dataset("data",   data=chunk_data)
@@ -134,15 +140,14 @@ for sp_path in spindle_files:
     predictions, _ = tester.get_predictions()
     pred = predictions[0].cpu().detach().numpy()  # (1152,7)
     true = labels[0]                               # (1152,7)
-
     os.remove(tmp_hdf5)
 
-    # Metrics
-    l2 = np.sqrt(np.sum((pred[:, :3] - true[:, :3])**2, axis=1))
-    sh_elv_rmse = np.sqrt(np.mean((pred[:,4]-true[:,4])**2))
-    sh_rot_rmse = np.sqrt(np.mean((pred[:,5]-true[:,5])**2))
-    elbow_rmse  = np.sqrt(np.mean((pred[:,6]-true[:,6])**2))
-    wrist_rmse  = np.sqrt(np.mean((pred[:,:3]-true[:,:3])**2))
+    # --- Metrics ---
+    l2          = np.sqrt(np.sum((pred[:, :3] - true[:, :3])**2, axis=1))
+    sh_elv_rmse = np.sqrt(np.mean((pred[:, 4] - true[:, 4])**2))
+    sh_rot_rmse = np.sqrt(np.mean((pred[:, 5] - true[:, 5])**2))
+    elbow_rmse  = np.sqrt(np.mean((pred[:, 6] - true[:, 6])**2))
+    wrist_rmse  = np.sqrt(np.mean((pred[:, :3] - true[:, :3])**2))
     mean_l2     = l2.mean()
 
     summary_rows.append({
@@ -154,48 +159,52 @@ for sp_path in spindle_files:
         "mean_l2_cm":      mean_l2,
     })
 
-    # Store for panel B
     all_true_xyz[direction] = true[:, :3]
     all_pred_xyz[direction] = pred[:, :3]
 
     # --- Per-direction CSV ---
-    df_out = pd.DataFrame({
-        "time_s": t,
-        "true_wrist_X_cm":       true[:,0], "true_wrist_Y_cm":      true[:,1],
-        "true_wrist_Z_cm":       true[:,2], "true_shoulder_elv_deg": true[:,4],
-        "true_shoulder_rot_deg": true[:,5], "true_elbow_flexion_deg":true[:,6],
-        "pred_wrist_X_cm":       pred[:,0], "pred_wrist_Y_cm":       pred[:,1],
-        "pred_wrist_Z_cm":       pred[:,2], "pred_shoulder_elv_deg": pred[:,4],
-        "pred_shoulder_rot_deg": pred[:,5], "pred_elbow_flexion_deg":pred[:,6],
-        "l2_distance_cm": l2,
-    })
-    df_out.to_csv(os.path.join(CENTEROUT_DIR, f"results_{direction}.csv"), index=False)
+    pd.DataFrame({
+        "time_s":                  t,
+        "true_wrist_X_cm":         true[:, 0],
+        "true_wrist_Y_cm":         true[:, 1],
+        "true_wrist_Z_cm":         true[:, 2],
+        "true_shoulder_elv_deg":   true[:, 4],
+        "true_shoulder_rot_deg":   true[:, 5],
+        "true_elbow_flexion_deg":  true[:, 6],
+        "pred_wrist_X_cm":         pred[:, 0],
+        "pred_wrist_Y_cm":         pred[:, 1],
+        "pred_wrist_Z_cm":         pred[:, 2],
+        "pred_shoulder_elv_deg":   pred[:, 4],
+        "pred_shoulder_rot_deg":   pred[:, 5],
+        "pred_elbow_flexion_deg":  pred[:, 6],
+        "l2_distance_cm":          l2,
+    }).to_csv(os.path.join(CENTEROUT_DIR, f"results_{direction}.csv"), index=False)
 
-    # --- Per-direction time series figure ---
-    BLACK   = "#1a1a1a"
-    CRIMSON = "#c0392b"
-    ORANGE  = "#e67e22"
-
+    # --- Per-direction 7-panel time series ---
     plot_cols = [
-        (true[:,4], pred[:,4], "Shoulder elevation (deg)", sh_elv_rmse),
-        (true[:,5], pred[:,5], "Shoulder rotation (deg)",  sh_rot_rmse),
-        (true[:,6], pred[:,6], "Elbow flexion (deg)",      elbow_rmse),
-        (true[:,0], pred[:,0], "Wrist X (cm)", np.sqrt(np.mean((pred[:,0]-true[:,0])**2))),
-        (true[:,1], pred[:,1], "Wrist Y (cm)", np.sqrt(np.mean((pred[:,1]-true[:,1])**2))),
-        (true[:,2], pred[:,2], "Wrist Z (cm)", np.sqrt(np.mean((pred[:,2]-true[:,2])**2))),
+        (true[:, 4], pred[:, 4], "Shoulder elevation (deg)", sh_elv_rmse),
+        (true[:, 5], pred[:, 5], "Shoulder rotation (deg)",  sh_rot_rmse),
+        (true[:, 6], pred[:, 6], "Elbow flexion (deg)",      elbow_rmse),
+        (true[:, 0], pred[:, 0], "Wrist X (cm)",
+         np.sqrt(np.mean((pred[:, 0]-true[:, 0])**2))),
+        (true[:, 1], pred[:, 1], "Wrist Y (cm)",
+         np.sqrt(np.mean((pred[:, 1]-true[:, 1])**2))),
+        (true[:, 2], pred[:, 2], "Wrist Z (cm)",
+         np.sqrt(np.mean((pred[:, 2]-true[:, 2])**2))),
     ]
 
     fig, axes = plt.subplots(7, 1, figsize=(11, 20), sharex=True,
                              gridspec_kw={"hspace": 0.45})
     for ax, (tv, pv, ylabel, col_rmse) in zip(axes[:6], plot_cols):
         ax.plot(t, tv, c=BLACK,   linewidth=1.8, label="Ground truth", zorder=3)
-        ax.plot(t, pv, c=CRIMSON, linewidth=1.5, linestyle="--", label="Predicted", zorder=2)
+        ax.plot(t, pv, c=CRIMSON, linewidth=1.5, linestyle="--",
+                label="Predicted", zorder=2)
         ax.set_ylabel(ylabel, fontsize=9, labelpad=4)
-        ax.text(0.01, 0.93, f"RMSE: {col_rmse:.3f}", transform=ax.transAxes,
-                fontsize=8, va='top', color='dimgray',
+        ax.text(0.01, 0.93, f"RMSE: {col_rmse:.3f}",
+                transform=ax.transAxes, fontsize=8, va='top', color='dimgray',
                 bbox=dict(facecolor='white', edgecolor='none', alpha=0.7, pad=1))
         ax.legend(fontsize=8, loc="upper right", framealpha=0.7)
-        ax.spines[['top','right']].set_visible(False)
+        ax.spines[['top', 'right']].set_visible(False)
         ax.tick_params(labelsize=8)
 
     axes[6].fill_between(t, 0, l2, color=ORANGE, alpha=0.25)
@@ -205,13 +214,11 @@ for sp_path in spindle_files:
     axes[6].set_ylabel("Wrist L2\ndistance (cm)", fontsize=9)
     axes[6].set_xlabel("Time (s)", fontsize=10)
     axes[6].legend(fontsize=8, loc="upper right", framealpha=0.7)
-    axes[6].spines[['top','right']].set_visible(False)
+    axes[6].spines[['top', 'right']].set_visible(False)
     axes[6].tick_params(labelsize=8)
 
     fig.suptitle(
-        f"Center-out {direction}\n"
-        f"sh_elv {sh_elv_rmse:.2f}°  sh_rot {sh_rot_rmse:.2f}°  "
-        f"elbow {elbow_rmse:.2f}°  wrist {wrist_rmse:.2f} cm  mean L2 {mean_l2:.2f} cm",
+        f"Center-out: {direction.replace('_', ' ')}\n",
         fontsize=10, y=1.00
     )
     plt.tight_layout()
@@ -224,7 +231,8 @@ for sp_path in spindle_files:
     print()
 
 # ============================================================
-# PANEL B STYLE: side-by-side truth vs predicted trajectories
+# PANEL B: side-by-side XY plane (their horizontal plane)
+# their X = lateral, their Y = anterior/posterior
 # ============================================================
 fig2, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
                                          sharey=True, sharex=False)
@@ -232,69 +240,67 @@ fig2, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
 for direction in DIRECTIONS_ORDERED:
     if direction not in all_true_xyz:
         continue
-    color = DIR_COLORS.get(direction, "gray")
+    color    = DIR_COLORS.get(direction, "gray")
     true_xyz = all_true_xyz[direction]
     pred_xyz = all_pred_xyz[direction]
 
-    # Ground truth -- solid line
-    ax_true.plot(true_xyz[:, 0], true_xyz[:, 2], c=color,
+    # Plot XY -- their horizontal plane
+    ax_true.plot(true_xyz[:, 0], true_xyz[:, 1], c=color,
                  linewidth=2.0, alpha=0.85, label=direction.replace("_", " "))
-    ax_true.scatter(true_xyz[0, 0],  true_xyz[0, 2],
-                    c=color, s=50, zorder=5, marker='o', edgecolors='black', linewidth=0.5)
+    ax_true.scatter(true_xyz[0, 0], true_xyz[0, 1], c=color, s=50, zorder=5,
+                    marker='o', edgecolors='black', linewidth=0.5)
 
-    # Predicted -- same color, dashed
-    ax_pred.plot(pred_xyz[:, 0], pred_xyz[:, 2], c=color,
+    ax_pred.plot(pred_xyz[:, 0], pred_xyz[:, 1], c=color,
                  linewidth=2.0, alpha=0.85, linestyle="--")
-    ax_pred.scatter(pred_xyz[0, 0], pred_xyz[0, 2],
-                    c=color, s=50, zorder=5, marker='o', edgecolors='black', linewidth=0.5)
+    ax_pred.scatter(pred_xyz[0, 0], pred_xyz[0, 1], c=color, s=50, zorder=5,
+                    marker='o', edgecolors='black', linewidth=0.5)
 
 for ax, title in [(ax_true, "Ground truth"), (ax_pred, "Predicted")]:
     ax.set_xlabel("X (cm)", fontsize=11)
-    ax.set_title(title, fontsize=13, fontweight='500')
+    ax.set_title(title, fontsize=13)
     ax.grid(True, alpha=0.2, linewidth=0.5)
-    ax.spines[['top','right']].set_visible(False)
+    ax.spines[['top', 'right']].set_visible(False)
     ax.tick_params(labelsize=9)
     ax.set_aspect('equal')
 
-ax_true.set_ylabel("Z (cm)", fontsize=11)
+ax_true.set_ylabel("Y (cm)", fontsize=11)
 ax_true.legend(fontsize=7, loc="lower right", ncol=2, framealpha=0.7,
                title="Direction", title_fontsize=8)
 
-fig2.suptitle(
-    "Center-out reach trajectories: XZ plane)\n"
-    "Solid = ground truth   Dashed = model prediction",
-    fontsize=11, y=1.02
-)
 plt.tight_layout()
 plt.savefig(os.path.join(CENTEROUT_DIR, "panel_b_trajectories.png"),
             dpi=150, bbox_inches="tight")
 plt.close()
-print(f"Saved panel_b_trajectories.png")
+print("Saved panel_b_trajectories.png")
 
 # ============================================================
 # TERMINAL SUMMARY
 # ============================================================
 summary_df = pd.DataFrame(summary_rows)
-summary_df.to_csv(os.path.join(CENTEROUT_DIR, "summary_all_directions.csv"), index=False)
+summary_df.to_csv(
+    os.path.join(CENTEROUT_DIR, "summary_all_directions.csv"), index=False
+)
 
 print()
 print("="*65)
-print(f"{'Direction':<18} {'sh_elv':>8} {'sh_rot':>8} {'elbow':>8} {'wrist':>8} {'L2':>8}")
-print(f"{'':18} {'RMSE°':>8} {'RMSE°':>8} {'RMSE°':>8} {'RMSE cm':>8} {'mean cm':>8}")
+print(f"{'Direction':<20} {'sh_elv':>7} {'sh_rot':>7} {'elbow':>7} "
+      f"{'wrist':>8} {'L2':>8}")
+print(f"{'':20} {'RMSE°':>7} {'RMSE°':>7} {'RMSE°':>7} "
+      f"{'RMSE cm':>8} {'mean cm':>8}")
 print("-"*65)
 for row in summary_rows:
-    print(f"{row['direction']:<18} "
-          f"{row['sh_elv_rmse_deg']:>8.2f} "
-          f"{row['sh_rot_rmse_deg']:>8.2f} "
-          f"{row['elbow_rmse_deg']:>8.2f} "
+    print(f"{row['direction']:<20} "
+          f"{row['sh_elv_rmse_deg']:>7.2f} "
+          f"{row['sh_rot_rmse_deg']:>7.2f} "
+          f"{row['elbow_rmse_deg']:>7.2f} "
           f"{row['wrist_rmse_cm']:>8.2f} "
           f"{row['mean_l2_cm']:>8.2f}")
 print("-"*65)
 means = summary_df.mean(numeric_only=True)
-print(f"{'MEAN':<18} "
-      f"{means['sh_elv_rmse_deg']:>8.2f} "
-      f"{means['sh_rot_rmse_deg']:>8.2f} "
-      f"{means['elbow_rmse_deg']:>8.2f} "
+print(f"{'MEAN':<20} "
+      f"{means['sh_elv_rmse_deg']:>7.2f} "
+      f"{means['sh_rot_rmse_deg']:>7.2f} "
+      f"{means['elbow_rmse_deg']:>7.2f} "
       f"{means['wrist_rmse_cm']:>8.2f} "
       f"{means['mean_l2_cm']:>8.2f}")
 print("="*65)
