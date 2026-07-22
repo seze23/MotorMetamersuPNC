@@ -46,7 +46,7 @@ WRIST_MARKER    = "Handle"
 #   their Z =  OpenSim Y (vertical/up)
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 
-# --- Load model once ---
+# Load model
 print("Loading model...")
 model      = osm.Model(MODEL_PATH)
 init_state = model.initSystem()
@@ -66,7 +66,7 @@ for mname in [SHOULDER_MARKER, ELBOW_MARKER, WRIST_MARKER]:
         raise KeyError(f"Marker '{mname}' not found in model")
 print()
 
-# --- Find all center-out .mot files ---
+# Find all center-out .mot files
 mot_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "center_out_*.mot")))
 if not mot_files:
     raise FileNotFoundError(f"No center_out_*.mot files found in {CENTEROUT_DIR}")
@@ -76,7 +76,7 @@ for f in mot_files:
     print(f"  {os.path.basename(f)}")
 print()
 
-# --- Process each direction ---
+# Process each direction
 for mot_path in mot_files:
     direction = os.path.basename(mot_path).replace("center_out_","").replace(".mot","")
     out_npz   = os.path.join(CENTEROUT_DIR, f"center_out_{direction}.npz")
@@ -159,4 +159,4 @@ for mot_path in mot_files:
     print(f"  Reach distance (approx): {reach_dist:.1f}cm")
     print()
 
-print(f"All done. {len(mot_files)} directions extracted.")
+print(f"{len(mot_files)} directions extracted.")

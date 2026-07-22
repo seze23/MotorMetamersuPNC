@@ -30,7 +30,7 @@ sys.path.insert(0, REPO_DIR)
 from data_generation.extract_flag3d_data_utils import convert_to_joint_angles
 
 # Used as initial guess and reference for IK
-REST_ANGLES = np.array([19.0, 39.0, 9.9, 84.3]) # elv, sh_elv, sh_rot, elbow
+REST_ANGLES = np.array([30.0, 35.0, 24.0, 87.0]) # elv, sh_elv, sh_rot, elbow
 
 # The monkey workspace center in monkey pos coords
 # (from generate_centerout_xyz.py output)
@@ -74,7 +74,7 @@ for xyz_path in xyz_files:
     # (shoulder is at origin in their shoulder-centered frame)
     # We need to add back the shoulder offset to get absolute lab coords
     # From FK: rest wrist lab XY = (26.0, -16.5), shoulder at (0, 0)
-    # Monkey center pos ~ (-1.5, -33.1) absolute -> maps to wrist at rest
+    # Monkey center pos ~ (-1.5, -33.1)
 
     # The convert_to_joint_angles function expects:
     # shoulder (3,T), elbow (3,T), hand (3,T) in their world frame, shoulder-centered
@@ -174,4 +174,4 @@ for xyz_path in xyz_files:
     print(f"  Saved {os.path.basename(out_path)}")
     print()
 
-print("All done. Next: run generatecenterout.py")
+print("All done. Next: run gencenterout.py")

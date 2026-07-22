@@ -1,106 +1,78 @@
 """
-Generate desired XYZ end-effector positions for all 8
-center-out directions across 1152 timepoints at 240Hz.
+Generate desired XYZ end-effector positions for 8
+center-out directions at 10cm amplitude using minimum-jerk profiles.
 
-Source: real monkey reach trajectories from C_20170913_COactpas_TD.mat
-- 4 primary directions (0, 90, 180, 270 deg) from actual monkey data
-- 4 interpolated directions (45, 135, 225, 315 deg) averaged from adjacent
+Center position derived from FK at human KINARM rest posture:
+  elv_angle=30, shoulder_elv=35, shoulder_rot=24, elbow_flexion=87
+  -> wrist position in lab world frame: (26.0, -16.5, -28.6) cm
 
-Monkey pos is 2D (XY horizontal plane) in cm. We set Z = 0.
+The 8 reach targets are placed 10cm around this center in their XY plane
+(their horizontal plane: X=lateral, Y=anterior/posterior).
+Z is held constant.
 
-Output: dataexp/centerout/desired_xyz_<direction>.npz
-  - xyz: (1152, 3) desired wrist positions in monkey pos frame (cm), Z=0
-  - times: (1152,) time vector in seconds
+Timing (1152 frames at 240Hz = 4.8s):
+  Hold at center: 1.65s (396 frames)
+  Reach out:      0.50s (120 frames) - minimum-jerk
+  Hold at target: 0.50s (120 frames)
+  Return:         0.50s (120 frames) - minimum-jerk reversed
+  Hold at center: 1.65s (396 frames)
+
+Output: dataexp/centerout/desired_xyz_<name>.npz
+  xyz: (1152, 3) in lab world frame (cm), shoulder-centered
 """
 
 import numpy as np
 import os
-import resampy
-from scipy.io import loadmat
+import sys
 
-MAT_PATH      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/monkeydata/s1-kinematics/reaching_experiments/C_20170913_COactpas_TD.mat"
-CENTEROUT_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/dataexp/centerout"
+REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
+CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
 os.makedirs(CENTEROUT_DIR, exist_ok=True)
+
+sys.path.insert(0, REPO_DIR)
+from utils.visualize_sample import get_shoulder_elbow_wrist_loc
 
 SAMPLE_RATE = 240
 N_TOTAL     = 1152
 DURATION    = N_TOTAL / SAMPLE_RATE  # 4.8s
 
-# Timing at 240Hz
-N_HOLD_PRE   = int(1.65 * SAMPLE_RATE)   # 396
-N_REACH      = int(0.50 * SAMPLE_RATE)   # 120
-N_HOLD_MID   = int(0.50 * SAMPLE_RATE)   # 120
-N_RETURN     = int(0.50 * SAMPLE_RATE)   # 120
-N_HOLD_POST  = N_TOTAL - N_HOLD_PRE - N_REACH - N_HOLD_MID - N_RETURN  # 396
+N_HOLD_PRE  = 396   # 1.65s
+N_REACH     = 120   # 0.50s
+N_HOLD_MID  = 120   # 0.50s
+N_RETURN    = 120   # 0.50s
+N_HOLD_POST = 396   # 1.65s
 assert N_HOLD_PRE + N_REACH + N_HOLD_MID + N_RETURN + N_HOLD_POST == N_TOTAL
 
-times_240 = np.linspace(0, DURATION, N_TOTAL)
+times = np.linspace(0, DURATION, N_TOTAL)
 
-# Monkey data at 100Hz
-PRE_BINS  = 50   # bins before go cue = center hold
-POST_BINS = 50   # bins after go cue = reach phase
-MONKEY_HZ = 100
-dt_monkey = 1.0 / MONKEY_HZ
+# Compute center from FK at confirmed rest posture
+# Rest posture confirmed visually in OpenSim as natural KINARM horizontal position
+# Literature: KINARM shoulder abducted ~85deg humerothoracic, elbow ~90deg
+# In MoBL-ARMS: nearest in-distribution representation
+REST = dict(elv_angle=30.0, shoulder_elv=35.0, shoulder_rot=24.0,
+            elbow_flexion=87.0)
 
-print("Loading monkey data...")
-mat = loadmat(MAT_PATH, simplify_cells=True)
-td  = mat['trial_data']
+labels_rest = np.zeros((1, 7), dtype=np.float32)
+labels_rest[0, 3] = REST['elv_angle']
+labels_rest[0, 4] = REST['shoulder_elv']
+labels_rest[0, 5] = REST['shoulder_rot']
+labels_rest[0, 6] = REST['elbow_flexion']
 
-start  = td['idx_startTime']
-gocue  = td['idx_goCueTime']
-end    = td['idx_endTime']
-pos    = td['pos']      # (N, 2) cm, horizontal plane
-tgtdir = td['tgtDir']
+_, _, wrist_rest = get_shoulder_elbow_wrist_loc(labels_rest)
+wrist_rest = wrist_rest[0]  # (3,) X, Y, Z in cm, lab world frame
 
-def extract_median_reach(direction_deg):
-    """
-    Extract median reach trajectory for a given direction.
-    Returns (reach_xy, center_xy):
-      reach_xy: (POST_BINS, 2) median reach trajectory in cm, relative to center
-      center_xy: (2,) median center position in absolute coords
-    """
-    trials = np.where(tgtdir == direction_deg)[0]
-    reach_trajs = []
-    centers = []
+CENTER_XYZ = wrist_rest.copy()
+CENTER_XY  = wrist_rest[:2]   # horizontal plane: X=lateral, Y=anterior
 
-    for i in trials:
-        if i >= len(gocue): continue
-        s = int(start[i])
-        g = int(gocue[i])
-        if np.any(np.isnan(pos[s:g+POST_BINS])): continue
+print(f"Rest posture: elv={REST['elv_angle']} sh_elv={REST['shoulder_elv']} "
+      f"sh_rot={REST['shoulder_rot']} elbow={REST['elbow_flexion']}")
+print(f"Center wrist position (lab world frame):")
+print(f"  X={CENTER_XYZ[0]:.2f} cm (lateral)")
+print(f"  Y={CENTER_XYZ[1]:.2f} cm (anterior/posterior)")
+print(f"  Z={CENTER_XYZ[2]:.2f} cm (vertical)")
+print()
 
-        center = np.median(pos[s:g], axis=0)      # center position
-        reach  = pos[g:g+POST_BINS] - center       # reach relative to center
-        if reach.shape[0] < POST_BINS: continue
-
-        reach_trajs.append(reach)
-        centers.append(center)
-
-    reach_trajs = np.array(reach_trajs)   # (n_trials, POST_BINS, 2)
-    centers     = np.array(centers)       # (n_trials, 2)
-    return np.median(reach_trajs, axis=0), np.median(centers, axis=0)
-
-# Extract 4 primary directions
-print("Extracting monkey reach trajectories...")
-reach_data = {}
-center_positions = []
-for d in [0, 90, 180, 270]:
-    reach_xy, center_xy = extract_median_reach(d)
-    reach_data[d] = reach_xy
-    center_positions.append(center_xy)
-    peak = np.max(np.linalg.norm(reach_xy, axis=1))
-    print(f"  {d:3d}deg: peak reach = {peak:.2f}cm  "
-          f"endpoint = ({reach_xy[-1,0]:+.2f}, {reach_xy[-1,1]:+.2f})")
-
-# Use median center across all directions (the common starting point)
-center_xy = np.median(center_positions, axis=0)
-print(f"\nCenter position (monkey workspace): ({center_xy[0]:.2f}, {center_xy[1]:.2f}) cm")
-
-# Interpolate 4 diagonal directions by averaging adjacent pairs
-reach_data[45]  = (reach_data[0]   + reach_data[90])  / 2.0
-reach_data[135] = (reach_data[90]  + reach_data[180]) / 2.0
-reach_data[225] = (reach_data[180] + reach_data[270]) / 2.0
-reach_data[315] = (reach_data[270] + reach_data[0])   / 2.0
+REACH_CM = 10.0  # standard KINARM VGR reach amplitude
 
 DIRECTION_NAMES = {
     0:   "0_right",
@@ -114,62 +86,74 @@ DIRECTION_NAMES = {
 }
 
 def min_jerk(n):
+    """Minimum-jerk profile 0->1, zero velocity at endpoints."""
     t = np.linspace(0, 1, n)
     return 10*t**3 - 15*t**4 + 6*t**5
 
-print("\nGenerating 1152-timepoint XYZ trajectories...")
+mj = min_jerk(N_REACH)
+
+print(f"Generating {len(DIRECTION_NAMES)} XYZ trajectory files "
+      f"({REACH_CM}cm reach, {N_TOTAL} frames at {SAMPLE_RATE}Hz)...")
+print()
+
 for deg, name in DIRECTION_NAMES.items():
-    reach_xy = reach_data[deg]  # (POST_BINS, 2) at 100Hz
+    angle_rad = np.radians(deg)
 
-    # Resample reach from 100Hz to 240Hz over N_REACH frames
-    # reach_xy is (POST_BINS, 2) at 100Hz, resample to N_REACH frames at 240Hz
-    # resampy expects (channels, samples) so transpose, resample, transpose back
-    reach_resampled = resampy.resample(
-        reach_xy.T,          # (2, POST_BINS)
-        MONKEY_HZ,           # source sample rate: 100Hz
-        SAMPLE_RATE,         # target sample rate: 240Hz
-        axis=1
-    ).T                      # (resampled_frames, 2)
+    # Target in their XY plane, Z held at rest height
+    target_xy  = CENTER_XY + REACH_CM * np.array([np.cos(angle_rad),
+                                                    np.sin(angle_rad)])
+    target_xyz = np.array([target_xy[0], target_xy[1], CENTER_XYZ[2]])
 
-    # resampy output length = ceil(POST_BINS * 240/100) = ceil(50 * 2.4) = 120
-    # which matches N_REACH = 120 exactly -- verify this:
-    assert reach_resampled.shape[0] == N_REACH, \
-    f"Expected {N_REACH} frames after resampling, got {reach_resampled.shape[0]}"
-
-    # Target = endpoint of reach
-    target_xy = reach_resampled[-1]
-
-    # Return = time-reversed reach
-    return_resampled = reach_resampled[::-1]
-
-    # Build full XY trajectory (relative to center = origin)
-    traj_xy = np.zeros((N_TOTAL, 2))
-    traj_xy[:N_HOLD_PRE]  = 0.0              # hold at center
-    traj_xy[N_HOLD_PRE:N_HOLD_PRE+N_REACH] = reach_resampled
-    traj_xy[N_HOLD_PRE+N_REACH:N_HOLD_PRE+N_REACH+N_HOLD_MID] = target_xy
-    traj_xy[N_HOLD_PRE+N_REACH+N_HOLD_MID:N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN] = return_resampled
-    traj_xy[N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN:] = 0.0   # back at center
-
-    # Convert to absolute monkey workspace coords (add center back)
-    traj_xy_abs = traj_xy + center_xy[np.newaxis, :]
-
-    # Full XYZ: monkey pos is horizontal (XY), Z=0 (planar task)
+    # Build full 3D trajectory
     xyz = np.zeros((N_TOTAL, 3), dtype=np.float32)
-    xyz[:, 0] = traj_xy_abs[:, 0]   # horizontal X
-    xyz[:, 1] = traj_xy_abs[:, 1]   # horizontal Y
-    xyz[:, 2] = 0.0                  # Z = 0 (horizontal plane)
 
-    reach_dist = np.linalg.norm(target_xy)
-    print(f"  {name:<18}: reach dist={reach_dist:.2f}cm  "
-          f"target=({target_xy[0]:+.2f},{target_xy[1]:+.2f})")
+    # Hold at center
+    xyz[:N_HOLD_PRE] = CENTER_XYZ
+
+    # Reach: center -> target via min-jerk
+    for dim in range(3):
+        xyz[N_HOLD_PRE:N_HOLD_PRE+N_REACH, dim] = (
+            CENTER_XYZ[dim] + (target_xyz[dim] - CENTER_XYZ[dim]) * mj
+        )
+
+    # Hold at target
+    xyz[N_HOLD_PRE+N_REACH:
+        N_HOLD_PRE+N_REACH+N_HOLD_MID] = target_xyz
+
+    # Return
+    for dim in range(3):
+        xyz[N_HOLD_PRE+N_REACH+N_HOLD_MID:
+            N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN, dim] = (
+            target_xyz[dim] + (CENTER_XYZ[dim] - target_xyz[dim]) * mj
+        )
+
+    # Hold at center
+    xyz[N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN:] = CENTER_XYZ
+
+    # Sanity checks
+    assert np.allclose(xyz[0], xyz[-1], atol=1e-5), \
+        "Start and end should match (hold at center)"
+    assert np.allclose(xyz[0], CENTER_XYZ, atol=1e-5), \
+        "Should start at center"
+    reach_dist = np.linalg.norm(
+        xyz[N_HOLD_PRE+N_REACH-1] - CENTER_XYZ
+    )
+
+    print(f"  {name:<18}: target XY=({target_xy[0]:+.1f},{target_xy[1]:+.1f}) cm  "
+          f"Z={CENTER_XYZ[2]:.1f} cm  dist={reach_dist:.1f}cm")
 
     out_path = os.path.join(CENTEROUT_DIR, f"desired_xyz_{name}.npz")
     np.savez(out_path,
-             xyz=xyz,
-             times=times_240,
-             center_xy=center_xy,
+             xyz=xyz,                    # (1152, 3) lab world frame, cm
+             times=times,
+             center_xyz=CENTER_XYZ,
+             target_xyz=target_xyz,
+             rest_posture=np.array([REST['elv_angle'], REST['shoulder_elv'],
+                                    REST['shoulder_rot'], REST['elbow_flexion']]),
              direction_deg=deg,
              direction_name=name)
 
-print(f"\nSaved {len(DIRECTION_NAMES)} xyz trajectory files to {CENTEROUT_DIR}")
-print("Next: run ik_centerout.py")
+print()
+print(f"Saved {len(DIRECTION_NAMES)} files to {CENTEROUT_DIR}")
+print("XYZ positions are in lab world frame (shoulder-centered, cm)")
+print("Next: run ikcenterout.py")
