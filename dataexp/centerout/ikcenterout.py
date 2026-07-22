@@ -26,7 +26,7 @@ sys.path.insert(0, REPO_DIR)
 from utils.visualize_sample import get_shoulder_elbow_wrist_loc
 
 # Rest posture
-REST_ANGLES = np.array([20.0, 35.0, 25.0, 85.0])  # elv, sh_elv, sh_rot, elbow
+REST_ANGLES = np.array([20.0, 40.0, 25.0, 85.0])  # elv, sh_elv, sh_rot, elbow
 
 # EF3D training bounds
 BOUNDS = [(19, 79), (39, 99), (-6, 54), (45, 130)]
@@ -44,14 +44,13 @@ for f in xyz_files:
 print()
 
 def fk_wrist(angles):
-    """Get wrist position using lab's FK function."""
-    labels = np.zeros((1, 7), dtype=np.float32)
-    labels[0, 3] = angles[0]  # elv_angle
-    labels[0, 4] = angles[1]  # shoulder_elv
-    labels[0, 5] = angles[2]  # shoulder_rot
-    labels[0, 6] = angles[3]  # elbow_flexion
+    labels = np.zeros((1, 7), dtype=np.float64)  # float64 -- critical for gradient
+    labels[0, 3] = angles[0]
+    labels[0, 4] = angles[1]
+    labels[0, 5] = angles[2]
+    labels[0, 6] = angles[3]
     _, _, wrist = get_shoulder_elbow_wrist_loc(labels)
-    return wrist[0]  # (3,) X, Y, Z in cm
+    return wrist[0].astype(np.float64)
 
 for xyz_path in xyz_files:
     name     = os.path.basename(xyz_path).replace("desired_xyz_","").replace(".npz","")
@@ -63,7 +62,7 @@ for xyz_path in xyz_files:
     xyz_desired = d['xyz']         # (1152, 3) desired wrist in world frame, cm
     times       = d['times']
     center_xyz  = d['center_xyz']  # (3,) rest wrist position
-    rest_z      = float(center_xyz[2])
+    rest_z = float(center_xyz[2])
     N           = len(times)
 
     joint_angles = np.zeros((N, 4), dtype=np.float32)
@@ -76,34 +75,20 @@ for xyz_path in xyz_files:
     print(f"  Rest Z for penalty: {rest_z:.2f} cm")
 
     for i in range(N):
-        target = xyz_desired[i]  # (3,) desired wrist position
+        target = xyz_desired[i].astype(np.float64)  # was .copy()
+        prev_copy = prev.copy()  # snapshot current prev before defining cost
 
-        def cost(p, target=target, rest_z=rest_z, prev=prev):
+        def cost(p):
             w      = fk_wrist(p)
             xy_err = (w[0] - target[0])**2 + (w[1] - target[1])**2
-            z_pen  = 10.0 * (w[2] - rest_z)**2   # strong Z constraint
-            reg    = 0.01 * np.sum((p - prev)**2) # smooth transition
+            z_pen  = 10.0 * (w[2] - rest_z)**2
+            reg    = 0.001 * np.sum((p - prev_copy)**2)  # smaller weight
             return xy_err + z_pen + reg
 
-        # Multiple starts at peak reach frames to avoid local minima
-        if i % N == 396 + 60:  # midpoint of reach phase
-            starts = [prev,
-                      REST_ANGLES,
-                      np.array([19., 39., -6., 45.]),
-                      np.array([79., 99., 54., 130.]),
-                      np.array([45., 69., 24., 87.])]
-            best, best_cost = None, np.inf
-            for s0 in starts:
-                r = minimize(cost, s0, bounds=BOUNDS, method='L-BFGS-B')
-                if r.fun < best_cost:
-                    best_cost = r.fun
-                    best = r
-            res = best
-        else:
-            res = minimize(cost, prev, bounds=BOUNDS, method='L-BFGS-B')
-
+        res = minimize(cost, prev_copy, bounds=BOUNDS, method='L-BFGS-B',
+                options={'maxiter': 1000, 'ftol': 1e-15, 'gtol': 1e-8})
         joint_angles[i] = res.x
-        prev = res.x
+        prev = res.x.copy()
 
         if i % 200 == 0:
             w_sol  = fk_wrist(res.x)

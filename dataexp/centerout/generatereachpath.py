@@ -49,7 +49,7 @@ times = np.linspace(0, DURATION, N_TOTAL)
 # Rest posture confirmed visually in OpenSim as natural KINARM horizontal position
 # Literature: KINARM shoulder abducted ~85deg humerothoracic, elbow ~90deg
 # In MoBL-ARMS: nearest in-distribution representation
-REST = dict(elv_angle=20.0, shoulder_elv=35.0, shoulder_rot=25.0,
+REST = dict(elv_angle=20.0, shoulder_elv=40.0, shoulder_rot=25.0,
             elbow_flexion=85.0)
 
 labels_rest = np.zeros((1, 7), dtype=np.float32)
