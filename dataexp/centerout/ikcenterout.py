@@ -30,7 +30,7 @@ sys.path.insert(0, REPO_DIR)
 from data_generation.extract_flag3d_data_utils import convert_to_joint_angles
 
 # Used as initial guess and reference for IK
-REST_ANGLES = np.array([30.0, 35.0, 24.0, 87.0]) # elv, sh_elv, sh_rot, elbow
+REST_ANGLES = np.array([10.0, 35.0, 25.0, 85.0]) # elv, sh_elv, sh_rot, elbow
 
 # The monkey workspace center in monkey pos coords
 # (from generate_centerout_xyz.py output)

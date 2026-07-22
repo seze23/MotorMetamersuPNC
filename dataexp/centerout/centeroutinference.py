@@ -45,18 +45,18 @@ SAMPLE_RATE = 240
 
 # Updated direction names matching monkey-delta generator
 DIRECTIONS_ORDERED = [
-    "0_right", "45_fwd_right", "90_forward", "135_fwd_left",
-    "180_left", "225_back_left", "270_backward", "315_back_right",
+    "0_forward", "45_fwd_left", "90_left", "135_back_left",
+    "180_backward", "225_back_right", "270_right", "315_fwd_right",
 ]
 DIR_COLORS = {
-    "0_right":        "#e74c3c",
-    "45_fwd_right":   "#e67e22",
-    "90_forward":     "#f1c40f",
-    "135_fwd_left":   "#2ecc71",
-    "180_left":       "#1abc9c",
-    "225_back_left":  "#3498db",
-    "270_backward":   "#9b59b6",
-    "315_back_right": "#e91e63",
+    "0_forward":      "#e74c3c",   # red
+    "45_fwd_left":    "#e67e22",   # orange
+    "90_left":        "#f1c40f",   # yellow
+    "135_back_left":  "#2ecc71",   # green
+    "180_backward":   "#1abc9c",   # teal
+    "225_back_right": "#3498db",   # blue
+    "270_right":      "#9b59b6",   # purple
+    "315_fwd_right":  "#e91e63",   # pink
 }
 
 BLACK   = "#1a1a1a"
