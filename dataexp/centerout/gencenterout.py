@@ -88,4 +88,4 @@ for ik_path in ik_files:
             print(v)
 
 print()
-print("Done. Run extractdatacenterout.py")
+print("Done. Run extractcenterout.py")
