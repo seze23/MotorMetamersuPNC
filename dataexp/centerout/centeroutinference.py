@@ -235,63 +235,76 @@ for sp_path in spindle_files:
     print()
 
 # ============================================================
-# PANEL B: side-by-side XY plane, reach phase only, centered
+# PANEL B: side-by-side XY plane, centered at reach onset.
+# Two windows are plotted:
+#   1. reach + hold + return (full window, 396:756) -- shows the complete
+#      out-and-back movement, including any outward/return path mismatch.
+#   2. reach phase only (396:516) -- isolates the outward-reach directional
+#      bias from hold/return-phase dynamics (e.g. causal-model lag on the
+#      return leg), per task #13.
 # ============================================================
-REACH_START = 396
-REACH_END   = 756   # 396 + 120 reach + 120 hold + 120 return
+N_HOLD_PRE = 396
+N_REACH    = 120
+N_HOLD_MID = 120
+N_RETURN   = 120
 
-fig2, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
-                                         sharey=True, sharex=True)
 
-for direction in DIRECTIONS_ORDERED:
-    if direction not in all_true_xyz:
-        continue
-    color = DIR_COLORS.get(direction, "gray")
+def plot_panel_b(window_start, window_end, out_filename, title_suffix):
+    """Save a Truth-vs-Predicted XY trajectory panel for the given frame window."""
+    fig, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
+                                            sharey=True, sharex=True)
 
-    # Trim to reach phase
-    true_xyz = all_true_xyz[direction][REACH_START:REACH_END]
-    pred_xyz = all_pred_xyz[direction][REACH_START:REACH_END]
+    for direction in DIRECTIONS_ORDERED:
+        if direction not in all_true_xyz:
+            continue
+        color = DIR_COLORS.get(direction, "gray")
 
-    # Center at start of reach (common origin for all directions)
-    true_rel = true_xyz - all_true_xyz[direction][REACH_START]
-    pred_rel = pred_xyz - all_pred_xyz[direction][REACH_START]
+        true_xyz = all_true_xyz[direction][window_start:window_end]
+        pred_xyz = all_pred_xyz[direction][window_start:window_end]
 
-    ax_true.plot(true_rel[:, 0], true_rel[:, 1], c=color,
-                 linewidth=2.0, alpha=0.85, label=direction.replace("_", " "))
-    ax_true.scatter(0, 0, c=color, s=40, zorder=5,
-                    marker='o', edgecolors='black', linewidth=0.5)
+        # Center at start of window (common origin for all directions)
+        true_rel = true_xyz - all_true_xyz[direction][window_start]
+        pred_rel = pred_xyz - all_pred_xyz[direction][window_start]
 
-    ax_pred.plot(pred_rel[:, 0], pred_rel[:, 1], c=color,
-                 linewidth=2.0, alpha=0.85, linestyle="--")
-    ax_pred.scatter(pred_rel[0, 0], pred_rel[0, 1], c=color, s=40, zorder=5,
-                    marker='o', edgecolors='black', linewidth=0.5)
+        ax_true.plot(true_rel[:, 0], true_rel[:, 1], c=color,
+                     linewidth=2.0, alpha=0.85, label=direction.replace("_", " "))
+        ax_true.scatter(0, 0, c=color, s=40, zorder=5,
+                        marker='o', edgecolors='black', linewidth=0.5)
 
-# Draw origin cross on both panels
-for ax in [ax_true, ax_pred]:
-    ax.axhline(0, c='black', linewidth=0.5, alpha=0.3)
-    ax.axvline(0, c='black', linewidth=0.5, alpha=0.3)
+        ax_pred.plot(pred_rel[:, 0], pred_rel[:, 1], c=color,
+                     linewidth=2.0, alpha=0.85, linestyle="--")
+        ax_pred.scatter(pred_rel[0, 0], pred_rel[0, 1], c=color, s=40, zorder=5,
+                        marker='o', edgecolors='black', linewidth=0.5)
 
-for ax, title in [(ax_true, "Truth"), (ax_pred, "Predicted")]:
-    ax.set_xlabel("X (cm)", fontsize=11)
-    ax.set_title(title, fontsize=13)
-    ax.grid(True, alpha=0.2, linewidth=0.5)
-    ax.spines[['top', 'right']].set_visible(False)
-    ax.tick_params(labelsize=9)
-    ax.set_aspect('equal')
+    for ax in [ax_true, ax_pred]:
+        ax.axhline(0, c='black', linewidth=0.5, alpha=0.3)
+        ax.axvline(0, c='black', linewidth=0.5, alpha=0.3)
 
-ax_true.set_ylabel("Y (cm)", fontsize=11)
-ax_true.legend(fontsize=7, loc="lower right", ncol=2, framealpha=0.7,
-               title="Direction", title_fontsize=8)
+    for ax, title in [(ax_true, "Truth"), (ax_pred, "Predicted")]:
+        ax.set_xlabel("X (cm)", fontsize=11)
+        ax.set_title(title, fontsize=13)
+        ax.grid(True, alpha=0.2, linewidth=0.5)
+        ax.spines[['top', 'right']].set_visible(False)
+        ax.tick_params(labelsize=9)
+        ax.set_aspect('equal')
 
-fig2.suptitle(
-    "Center-out reach trajectories\n",
-    fontsize=10, y=1.02
-)
-plt.tight_layout()
-plt.savefig(os.path.join(CENTEROUT_DIR, "panel_b_trajectories.png"),
-            dpi=150, bbox_inches="tight")
-plt.close()
-print("Saved panel_b_trajectories.png")
+    ax_true.set_ylabel("Y (cm)", fontsize=11)
+    ax_true.legend(fontsize=7, loc="lower right", ncol=2, framealpha=0.7,
+                   title="Direction", title_fontsize=8)
+
+    fig.suptitle(f"Center-out reach trajectories {title_suffix}\n",
+                 fontsize=10, y=1.02)
+    plt.tight_layout()
+    plt.savefig(os.path.join(CENTEROUT_DIR, out_filename), dpi=150,
+                bbox_inches="tight")
+    plt.close()
+    print(f"Saved {out_filename}")
+
+
+plot_panel_b(N_HOLD_PRE, N_HOLD_PRE + N_REACH + N_HOLD_MID + N_RETURN,
+             "panel_b_trajectories.png", "(reach + hold + return)")
+plot_panel_b(N_HOLD_PRE, N_HOLD_PRE + N_REACH,
+             "panel_b_reach_only_trajectories.png", "(reach phase only)")
 
 # ============================================================
 # TERMINAL SUMMARY
