@@ -15,6 +15,7 @@ Exit code 0 if all directions pass, 1 otherwise.
 
 import glob
 import os
+import re
 import sys
 
 import numpy as np
@@ -24,6 +25,12 @@ from fk_helper import get_shoulder_elbow_wrist_loc
 
 N_HOLD_PRE = 396
 N_REACH = 120
+
+# Grid-point names encode their target radius directly (g<deg>_r<radius_cm>,
+# from generate_grid_targets.py) -- parse it so the reach-amplitude check
+# doesn't wrongly compare a 4cm/8cm/12cm grid target against the original
+# 8-direction design's fixed 10cm expectation.
+GRID_NAME_RE = re.compile(r"^g\d+_r(\d+)$")
 
 # (column index, low, high) for the 4 driven coordinates
 EF3D_BOUNDS = {
@@ -66,8 +73,11 @@ def check_direction(path):
     delta = peak - center
     reach_xy = float(np.linalg.norm(delta[:2]))
     z_drift = float(abs(delta[2]))
-    if abs(reach_xy - REACH_CM) > REACH_TOL_CM:
-        problems.append(f"peak reach {reach_xy:.1f}cm != {REACH_CM}cm")
+
+    grid_match = GRID_NAME_RE.match(name)
+    expected_reach = float(grid_match.group(1)) if grid_match else REACH_CM
+    if abs(reach_xy - expected_reach) > REACH_TOL_CM:
+        problems.append(f"peak reach {reach_xy:.1f}cm != {expected_reach}cm")
     if z_drift > Z_DRIFT_MAX_CM:
         problems.append(f"Z drift {z_drift:.1f}cm > {Z_DRIFT_MAX_CM}cm")
 
