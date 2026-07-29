@@ -11,7 +11,7 @@ import numpy as np
 import os
 import glob
 
-CENTEROUT_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/dataexp/centerout"
+from paths import CENTEROUT_DIR  # local path config
 
 SAMPLE_RATE = 240
 N_TOTAL     = 1152

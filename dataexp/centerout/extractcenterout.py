@@ -18,8 +18,7 @@ import numpy as np
 import os
 import glob
 
-MODEL_PATH    = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/MoBL-ARMSDynamicUpperLimb-latest/MoBL-ARMS Upper Extremity Model/Model/4.1/DefaultMOBL_ARMS_fixed_41.osim"
-CENTEROUT_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/dataexp/centerout"
+from paths import MODEL_PATH, CENTEROUT_DIR  # local path config
 
 MUSCLE_NAMES = [
     'CORB',    'DELT1',   'DELT2',    'DELT3',  'INFSP',

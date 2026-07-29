@@ -3,8 +3,9 @@ Generate desired XYZ end-effector positions for 8
 center-out directions at 10cm amplitude using minimum-jerk profiles.
 
 Center position derived from FK at human KINARM rest posture:
-  elv_angle=30, shoulder_elv=35, shoulder_rot=24, elbow_flexion=87
-  -> wrist position in lab world frame: (26.0, -16.5, -28.6) cm
+  elv_angle=45, shoulder_elv=70, shoulder_rot=25, elbow_flexion=90
+  -> wrist position in lab world frame: (41.3, -6.8, -2.9) cm
+     (~shoulder height: KINARM horizontal-plane configuration)
 
 The 8 reach targets are placed 10cm around this center in their XY plane
 (their horizontal plane: X=lateral, Y=anterior/posterior).
@@ -25,12 +26,8 @@ import numpy as np
 import os
 import sys
 
-REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
-os.makedirs(CENTEROUT_DIR, exist_ok=True)
-
-sys.path.insert(0, REPO_DIR)
-from utils.visualize_sample import get_shoulder_elbow_wrist_loc
+from paths import REPO_DIR, CENTEROUT_DIR  # local path config
+from fk_helper import get_shoulder_elbow_wrist_loc
 
 SAMPLE_RATE = 240
 N_TOTAL     = 1152
@@ -45,12 +42,14 @@ assert N_HOLD_PRE + N_REACH + N_HOLD_MID + N_RETURN + N_HOLD_POST == N_TOTAL
 
 times = np.linspace(0, DURATION, N_TOTAL)
 
-# Compute center from FK at confirmed rest posture
-# Rest posture confirmed visually in OpenSim as natural KINARM horizontal position
-# Literature: KINARM shoulder abducted ~85deg humerothoracic, elbow ~90deg
-# In MoBL-ARMS: nearest in-distribution representation
-REST = dict(elv_angle=20.0, shoulder_elv=40.0, shoulder_rot=25.0,
-            elbow_flexion=85.0)
+# Compute center from FK at KINARM horizontal-plane rest posture.
+# Recentered 2026-07-29 off the EF3D floors (elv_angle>=19, shoulder_elv>=39)
+# so reaches stay in the CNN training distribution; wrist sits ~shoulder height
+# (Z ~ -3 cm), the true KINARM horizontal-plane configuration. Grounded in the
+# Scott-lab center-out literature (shoulder ~30-35 deg plane, elbow ~75-90 deg;
+# Cluff & Scott 2013, Maeda/Scott PMC6596259). See DRIFT_EXPLAINER.md.
+REST = dict(elv_angle=45.0, shoulder_elv=70.0, shoulder_rot=25.0,
+            elbow_flexion=90.0)
 
 labels_rest = np.zeros((1, 7), dtype=np.float32)
 labels_rest[0, 3] = REST['elv_angle']
