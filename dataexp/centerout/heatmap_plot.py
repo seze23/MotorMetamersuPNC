@@ -34,7 +34,7 @@ PEAK_FRAME = N_HOLD_PRE + N_REACH - 1  # 515, matches reach-only isolation
 csv_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "results_g*.csv")))
 if not csv_files:
     raise FileNotFoundError(
-        f"No results_g*.csv in {CENTEROUT_DIR} -- run generate_grid_targets.py "
+        f"No results_g*.csv in {CENTEROUT_DIR} run generate_grid_targets.py "
         "through centeroutinference.py first."
     )
 print(f"Found {len(csv_files)} grid-point result files.")
