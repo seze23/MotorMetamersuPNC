@@ -310,6 +310,34 @@ def edge_rmse(pred, true, k=EDGE_FRAMES):
     return start, end, middle
 
 
+TRANSIENT_FRAMES = 20   # observed transient duration is ~15-20 frames, well
+                        # inside EDGE_FRAMES=60 -- a plain RMSE over 60 frames
+                        # is dominated by the ~40 settled-but-biased frames
+                        # that sit alongside the transient in that window,
+                        # which swamps out any real shrinkage in the transient
+                        # itself. This isolates just the fast excursion.
+SETTLE_WINDOW = (25, 55)  # frames used to estimate each run's own settled
+                          # baseline, clearly past the transient
+
+
+def transient_magnitude(pred, k=TRANSIENT_FRAMES, settle=SETTLE_WINDOW):
+    """Peak |pred - own settled baseline| within the first/last k frames.
+
+    Comparing this between the single-copy and tiled-context runs isolates
+    the fast boundary excursion from the (much slower, much longer-lived)
+    persistent offset/bias that a plain windowed RMSE conflates it with --
+    the bias contributes equally to both runs and to every frame in the
+    window, so it should mostly cancel out of *this* metric even though it
+    dominates a 60-frame RMSE.
+    """
+    s0, s1 = settle
+    start_baseline = np.median(pred[s0:s1], axis=0)
+    end_baseline = np.median(pred[-s1:-s0], axis=0)
+    start = np.max(np.abs(pred[:k] - start_baseline), axis=0)
+    end = np.max(np.abs(pred[-k:] - end_baseline), axis=0)
+    return start, end
+
+
 def main():
     args = parse_args()
     trial_idx, chunk, labels = load_random_ef3d_trial(args.trial, args.seed)
@@ -361,15 +389,28 @@ def main():
         return
 
     mid_start_rmse, mid_end_rmse, mid_mid_rmse = edge_rmse(middle_pred, true)
-    print(f"\n{'channel':<18}{'single-copy start':>18}{'tiled-middle start':>20}"
+    print(f"\n[Windowed RMSE, {EDGE_FRAMES}-frame -- includes the persistent "
+          f"bias alongside the transient, so shrinkage here is diluted]")
+    print(f"{'channel':<18}{'single-copy start':>18}{'tiled-middle start':>20}"
           f"{'single-copy end':>18}{'tiled-middle end':>18}")
     for name, idx, _ in PLOT_COLS:
         print(f"{name:<18}{start_rmse[idx]:>18.3f}{mid_start_rmse[idx]:>20.3f}"
               f"{end_rmse[idx]:>18.3f}{mid_end_rmse[idx]:>18.3f}")
 
-    shrink_start = 1 - (mid_start_rmse.mean() / (start_rmse.mean() + 1e-9))
-    shrink_end = 1 - (mid_end_rmse.mean() / (end_rmse.mean() + 1e-9))
-    print(f"\nMean edge-RMSE shrinkage when flanked by real context: "
+    single_start_tm, single_end_tm = transient_magnitude(pred)
+    tiled_start_tm, tiled_end_tm = transient_magnitude(middle_pred)
+    print(f"\n[Isolated transient magnitude, peak deviation from own settled "
+          f"baseline within {TRANSIENT_FRAMES} frames -- the real test of the "
+          f"zero-padding hypothesis]")
+    print(f"{'channel':<18}{'single-copy start':>18}{'tiled-middle start':>20}"
+          f"{'single-copy end':>18}{'tiled-middle end':>18}")
+    for name, idx, _ in PLOT_COLS:
+        print(f"{name:<18}{single_start_tm[idx]:>18.3f}{tiled_start_tm[idx]:>20.3f}"
+              f"{single_end_tm[idx]:>18.3f}{tiled_end_tm[idx]:>18.3f}")
+
+    shrink_start = 1 - (tiled_start_tm.mean() / (single_start_tm.mean() + 1e-9))
+    shrink_end = 1 - (tiled_end_tm.mean() / (single_end_tm.mean() + 1e-9))
+    print(f"\nMean isolated-transient shrinkage when flanked by real context: "
           f"start {shrink_start*100:.1f}%, end {shrink_end*100:.1f}%")
     if shrink_start > 0.4 and shrink_end > 0.4:
         print("-> Edge error drops substantially with real flanking context: "

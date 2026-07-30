@@ -102,6 +102,7 @@ def train_with_config(config):
         build_fc=config.get("build_fc", False),
         layer_norm=config.get("layer_norm", False),
         training_seed=training_seed,
+        padding_mode=config.get("padding_mode", "zeros"),  # backward compatible default
     )
 
     print("main -> models created")

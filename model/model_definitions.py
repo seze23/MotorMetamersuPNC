@@ -15,9 +15,48 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import yaml
 
 CUR_DIR = os.path.dirname(os.path.realpath(__file__))
+
+
+class _TemporalPadConv2d(nn.Module):
+    """Conv2d whose time-axis (last dim, W) padding uses `padding_mode`
+    (e.g. 'reflect', 'replicate'), while the muscle-axis (H) padding always
+    stays zero -- reflecting/replicating across the muscle-channel axis has
+    no biological meaning (no natural adjacency between muscle i and i+1),
+    so only the temporal boundary-artifact hypothesis is being tested here,
+    not a second confound on the spatial axis.
+
+    IMPORTANT: only used for padding_mode != "zeros". For "zeros", the
+    caller constructs a plain nn.Conv2d directly instead of this wrapper --
+    wrapping it here would nest the Conv2d one level deeper as `self.conv`,
+    changing state_dict key names (e.g. "model.0.0.weight" ->
+    "model.0.0.conv.weight") and breaking `load_state_dict` for the existing
+    immutable checkpoint. Confirmed by testing: the original checkpoint
+    failed to load with this wrapper unconditionally applied.
+    """
+
+    def __init__(self, in_channels, out_channels, kernel_size, stride,
+                 muscle_pad, time_pad, padding_mode):
+        super().__init__()
+        assert padding_mode != "zeros", (
+            "Use a plain nn.Conv2d for padding_mode='zeros' to preserve "
+            "state_dict key compatibility with existing checkpoints."
+        )
+        self.padding_mode = padding_mode
+        self.time_pad = time_pad
+        # Time axis padded manually in forward(); Conv2d only zero-pads
+        # the muscle axis (padding=(muscle_pad, 0)).
+        self.conv = nn.Conv2d(
+            in_channels, out_channels, kernel_size=kernel_size,
+            stride=stride, padding=(muscle_pad, 0),
+        )
+
+    def forward(self, x):
+        x = F.pad(x, (self.time_pad, self.time_pad, 0, 0), mode=self.padding_mode)
+        return self.conv(x)
 
 
 class SpatiotemporalNetwork(nn.Module):
@@ -46,6 +85,8 @@ class SpatiotemporalNetwork(nn.Module):
         build_fc=True,  # whether to build the fully connected layer
         layer_norm=False,
         training_seed=None,
+        padding_mode="zeros",  # 'zeros' (default, original behavior) | 'reflect' | 'replicate'
+                                # -- applies to the TIME axis only; muscle axis always zero-padded
     ):
         """Set up hyperparameters of the convolutional network.
 
@@ -110,6 +151,7 @@ class SpatiotemporalNetwork(nn.Module):
         self.task = task
         self.outtime = outtime
         self.layer_norm = layer_norm
+        self.padding_mode = padding_mode
 
         # Make model name
         # kernels = "-".join(str(i) for i in n_skernels)
@@ -170,19 +212,34 @@ class SpatiotemporalNetwork(nn.Module):
             ) // t_stride + 1
 
             # Add the layer to the model
+            _muscle_pad = (s_kernelsize - 1) // 2
+            _time_pad = (t_kernelsize - 1) // 2
+            if self.padding_mode == "zeros":
+                # Plain Conv2d, identical to the original implementation --
+                # preserves state_dict key compatibility with existing
+                # checkpoints (see _TemporalPadConv2d docstring).
+                conv_layer = nn.Conv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=(s_kernelsize, t_kernelsize),
+                    stride=(s_stride, t_stride),
+                    padding=(_muscle_pad, _time_pad),  # SAME padding
+                )
+            else:
+                conv_layer = _TemporalPadConv2d(
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=(s_kernelsize, t_kernelsize),
+                    stride=(s_stride, t_stride),
+                    muscle_pad=_muscle_pad,
+                    time_pad=_time_pad,
+                    padding_mode=self.padding_mode,
+                )
+
             if self.layer_norm:
                 self.model.append(
                     nn.Sequential(
-                        nn.Conv2d(
-                            in_channels=in_channels,
-                            out_channels=out_channels,
-                            kernel_size=(s_kernelsize, t_kernelsize),
-                            stride=(s_stride, t_stride),
-                            padding=(
-                                (s_kernelsize - 1) // 2,
-                                (t_kernelsize - 1) // 2,
-                            ),  # SAME padding
-                        ),
+                        conv_layer,
                         nn.LayerNorm(
                             [out_channels, H_out, W_out]
                             # normalized_shape=[out_channels, H_out]
@@ -193,16 +250,7 @@ class SpatiotemporalNetwork(nn.Module):
             else:
                 self.model.append(
                     nn.Sequential(
-                        nn.Conv2d(
-                            in_channels=in_channels,
-                            out_channels=out_channels,
-                            kernel_size=(s_kernelsize, t_kernelsize),
-                            stride=(s_stride, t_stride),
-                            padding=(
-                                (s_kernelsize - 1) // 2,
-                                (t_kernelsize - 1) // 2,
-                            ),  # SAME padding
-                        ),
+                        conv_layer,
                         nn.ReLU(),
                     )
                 )

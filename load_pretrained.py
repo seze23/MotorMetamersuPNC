@@ -152,6 +152,7 @@ def build_model(config, model_path, device):
         outtime=config["outtime"],
         my_dir=SAVE_DIR,
         layer_norm=config.get("layer_norm", False),
+        padding_mode=config.get("padding_mode", "zeros"),  # backward compatible: absent -> original zero-padding behavior
     )
 
     for fname in ("model.pt", "model.pth", "best_model.pt", "best_model.pth", "model.ckpt"):

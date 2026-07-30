@@ -20,14 +20,8 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
-# Data is read/written locally via CENTEROUT_DIR (paths.py). REPO_DIR must point
-# to a full checkout of seze23/MotorMetamersuPNC that provides the spindle helper
-# modules, the spindle config yaml, and the Ia/II coefficient files. These heavy
-# deps are NOT in the local center-out workspace, so this stage runs on the
-# cluster (or a full local clone); override with PROPRIO_REPO_DIR.
-from paths import CENTEROUT_DIR
-REPO_DIR      = os.environ.get(
-    "PROPRIO_REPO_DIR", "/home/sydneyez/sydneyez/ProprioceptiveIllusions")
+REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
+CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
 CONFIG_PATH   = os.path.join(REPO_DIR, "extract_data/configs/train_test_data_spindles_extended.yaml")
 
 sys.path.insert(0, REPO_DIR)
