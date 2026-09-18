@@ -58,11 +58,65 @@ stage consumes every `outputs/desired_xyz_*.npz` file automatically.
 
 ## Changing the OpenSim model
 
-Set `MODEL_PATH` in `dataexp/centerout/paths.py`. A replacement must expose the
-markers and coordinates used by the scripts (`R.Shoulder`, `Handle`,
-`R.Elbow.Lateral`, and the seven named coordinates). If its names or degrees of
-freedom differ, update the marker/coordinate constants in `ikcenterout.py` and
-`extractcenterout.py`. Also update the 25-muscle list and spindle optimal
-lengths if the muscle set changes. A neural checkpoint trained on the old
-25-muscle input is not compatible with a different input muscle ordering or
-count without an explicit mapping or retraining.
+Set `MODEL_PATH` in `dataexp/centerout/paths.py`. A replacement model must
+provide the following model-specific parameters, either under the current names
+or through an adapter that maps them to this canonical interface.
+
+### Required biomechanical parameters
+
+- **Model file:** path to a valid OpenSim `.osim` model.
+- **Reference marker:** the shoulder/reference origin (`R.Shoulder` currently).
+- **End-effector marker:** the point tracked by IK (`Handle` currently). A fixed
+  station or marker attached to the hand can be added if the model has none.
+- **Elbow marker:** used only for saved elbow trajectories
+  (`R.Elbow.Lateral` currently).
+- **Rest pose:** one value in degrees for every coordinate needed to place the
+  arm at the desired path origin. The current `REST` mapping is in
+  `generatereachpath.py` and `ikcenterout.py`.
+- **Driven coordinates:** coordinates set during muscle extraction. They are
+  currently `elv_angle`, `shoulder_elv`, `shoulder_rot`, and `elbow_flexion`.
+- **Motion-label coordinates:** ordered coordinates read from and written to
+  `.mot` files. They are currently the four driven coordinates followed by
+  `pro_sup`, `deviation`, and `flexion`.
+- **Coordinate transform:** a 3-by-3 rotation from OpenSim ground coordinates
+  to the pipeline world frame (`S2W`). Also specify position units; OpenSim uses
+  meters while pipeline XYZ paths use shoulder-centered centimeters.
+- **IK choices:** which coordinates are free, locked, or constrained; marker
+  weights; joint limits; and any additional markers required to remove IK
+  ambiguity. The current pipeline tracks only the end effector with weight 100.
+
+### Required muscle and spindle parameters
+
+- **Muscle list and order:** the exact ordered muscle names extracted by
+  `extractcenterout.py`. The current neural input uses 25 muscles.
+- **Optimal fiber lengths:** one value per muscle in
+  `train_test_data_spindles_extended.yaml`, in the same order.
+- **Ia and II spindle coefficients:** coefficient CSVs compatible with the
+  selected muscles and ordered identically.
+- **Sampling rate and sample count:** currently 240 Hz and 1,152 frames. Change
+  downstream configuration if the replacement uses another temporal format.
+
+### Required neural-model compatibility
+
+The supplied CNN interface expects an input shaped
+`(trial, 10 afferents, 25 muscles, time)`. A replacement musculoskeletal model
+is checkpoint-compatible only if its muscles have a validated one-to-one
+mapping into the same 25-muscle order and its signals use the same units,
+normalization, spindle coefficients, sample rate, and label convention.
+Renaming or reordering equivalent muscles can be handled by an adapter.
+Changing the muscle count or physiological meaning generally requires new
+coefficients and retraining the CNN.
+
+### Replacement checklist
+
+1. Load the model and verify all selected markers, coordinates, and muscles.
+2. Define its rest pose and ground-to-world transform.
+3. Confirm the rest end-effector round trip through the transform has near-zero
+   error in `ikcenterout.py`.
+4. Run one short path and inspect IK marker error and joint-limit violations.
+5. Verify every extracted fiber length is finite, positive, and varies where
+   expected.
+6. Verify spindle ranges and velocities remain within the neural model's
+   training distribution.
+7. Only reuse a checkpoint after validating muscle ordering, normalization,
+   temporal shape, and output-label semantics.
