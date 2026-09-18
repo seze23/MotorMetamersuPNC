@@ -1,165 +1,101 @@
-"""
-Generate desired XYZ end-effector positions for 8
-center-out directions at 10cm amplitude using minimum-jerk profiles.
+"""Generate configurable minimum-jerk center-out path artifacts."""
 
-Center position derived from FK at human KINARM rest posture:
-  elv_angle=30, shoulder_elv=35, shoulder_rot=24, elbow_flexion=87
-  -> wrist position in lab world frame: (26.0, -16.5, -28.6) cm
-
-The 8 reach targets are placed 10cm around this center in their XY plane
-(their horizontal plane: X=lateral, Y=anterior/posterior).
-Z is held constant.
-
-Timing (1152 frames at 240Hz = 4.8s):
-  Hold at center: 1.65s (396 frames)
-  Reach out:      0.50s (120 frames) - minimum-jerk
-  Hold at target: 0.50s (120 frames)
-  Return:         0.50s (120 frames) - minimum-jerk reversed
-  Hold at center: 1.65s (396 frames)
-
-Output: dataexp/centerout/desired_xyz_<name>.npz
-  xyz: (1152, 3) in lab world frame (cm), shoulder-centered
-"""
+import os
 
 import numpy as np
-import os
-import sys
 import opensim as osm
 
-from paths import REPO_DIR, CENTEROUT_DIR
+from experiment import create_manifest, relative_artifact, validate_path_artifact
+from paths import EXPERIMENT_CONFIG, MODEL_PATH, PATHS_DIR
 
-from paths import MODEL_PATH
-
-SAMPLE_RATE = 240
-N_TOTAL     = 1152
-DURATION    = N_TOTAL / SAMPLE_RATE  # 4.8s
-
-N_HOLD_PRE  = 396   # 1.65s
-N_REACH     = 120   # 0.50s
-N_HOLD_MID  = 120   # 0.50s
-N_RETURN    = 120   # 0.50s
-N_HOLD_POST = 396   # 1.65s
-assert N_HOLD_PRE + N_REACH + N_HOLD_MID + N_RETURN + N_HOLD_POST == N_TOTAL
-
-times = np.linspace(0, DURATION, N_TOTAL)
-
-# Compute center from FK at confirmed rest posture
-# Rest posture confirmed visually in OpenSim as natural KINARM horizontal position
-# Literature: KINARM shoulder abducted ~85deg humerothoracic, elbow ~90deg
-# In MoBL-ARMS: nearest in-distribution representation
-REST = dict(elv_angle=20.0, shoulder_elv=40.0, shoulder_rot=25.0,
-            elbow_flexion=85.0)
-
-# Derive the center from the same OpenSim model used by IK. This avoids a
-# second, approximate FK implementation drifting away from the actual model.
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
-model = osm.Model(MODEL_PATH)
-state = model.initSystem()
-coordinates = model.getCoordinateSet()
-for name, value in REST.items():
-    coordinates.get(name).setValue(state, np.radians(value))
-model.realizePosition(state)
-
-markers = model.getMarkerSet()
-shoulder = markers.get('R.Shoulder').getLocationInGround(state)
-handle = markers.get('Handle').getLocationInGround(state)
-shoulder = np.array([shoulder.get(i) for i in range(3)])
-handle = np.array([handle.get(i) for i in range(3)])
-wrist_rest = S2W @ (handle - shoulder) * 100.0
-
-CENTER_XYZ = wrist_rest.copy()
-CENTER_XY  = wrist_rest[:2]   # horizontal plane: X=lateral, Y=anterior
-
-print(f"Rest posture: elv={REST['elv_angle']} sh_elv={REST['shoulder_elv']} "
-      f"sh_rot={REST['shoulder_rot']} elbow={REST['elbow_flexion']}")
-print(f"Center wrist position (lab world frame):")
-print(f"  X={CENTER_XYZ[0]:.2f} cm (lateral)")
-print(f"  Y={CENTER_XYZ[1]:.2f} cm (anterior/posterior)")
-print(f"  Z={CENTER_XYZ[2]:.2f} cm (vertical)")
-print()
-
-REACH_CM = 10.0  # standard KINARM VGR reach amplitude
-
-DIRECTION_NAMES = {
-    0:   "0_right",
-    45:  "45_fwd_right",
-    90:  "90_forward",
-    135: "135_fwd_left",
-    180: "180_left",
-    225: "225_back_left",
-    270: "270_backward",
-    315: "315_back_right",
+DIRECTIONS = {
+    0: "0_right", 45: "45_fwd_right", 90: "90_forward",
+    135: "135_fwd_left", 180: "180_left", 225: "225_back_left",
+    270: "270_backward", 315: "315_back_right",
 }
 
-def min_jerk(n):
-    """Minimum-jerk profile 0->1, zero velocity at endpoints."""
-    t = np.linspace(0, 1, n)
-    return 10*t**3 - 15*t**4 + 6*t**5
 
-mj = min_jerk(N_REACH)
+def minimum_jerk(count):
+    phase = np.linspace(0, 1, count)
+    return 10 * phase**3 - 15 * phase**4 + 6 * phase**5
 
-print(f"Generating {len(DIRECTION_NAMES)} XYZ trajectory files "
-      f"({REACH_CM}cm reach, {N_TOTAL} frames at {SAMPLE_RATE}Hz)...")
-print()
 
-for deg, name in DIRECTION_NAMES.items():
-    angle_rad = np.radians(deg)
+def model_rest_center(rest_pose):
+    model = osm.Model(MODEL_PATH)
+    state = model.initSystem()
+    coordinates = model.getCoordinateSet()
+    for name, degrees in rest_pose.items():
+        coordinates.get(name).setValue(state, np.radians(degrees))
+    model.realizePosition(state)
+    markers = model.getMarkerSet()
+    shoulder = markers.get("R.Shoulder").getLocationInGround(state)
+    handle = markers.get("Handle").getLocationInGround(state)
+    shoulder = np.array([shoulder.get(i) for i in range(3)])
+    handle = np.array([handle.get(i) for i in range(3)])
+    return S2W @ (handle - shoulder) * 100.0
 
-    # Target in their XY plane, Z held at rest height
-    target_xy  = CENTER_XY + REACH_CM * np.array([np.cos(angle_rad),
-                                                    np.sin(angle_rad)])
-    target_xyz = np.array([target_xy[0], target_xy[1], CENTER_XYZ[2]])
 
-    # Build full 3D trajectory
-    xyz = np.zeros((N_TOTAL, 3), dtype=np.float32)
+def generate():
+    config = EXPERIMENT_CONFIG["path"]
+    sample_rate = float(config["sample_rate_hz"])
+    reach_cm = float(config["reach_cm"])
+    rest_pose = config["rest_pose_degrees"]
+    timing = config["timing_seconds"]
+    segment_names = ("hold_before", "reach", "hold_target", "return", "hold_after")
+    counts = {name: max(1, round(float(timing[name]) * sample_rate))
+              for name in segment_names}
+    n_total = sum(counts.values())
+    times = np.arange(n_total, dtype=np.float64) / sample_rate
+    center = model_rest_center(rest_pose)
+    reach_profile = minimum_jerk(counts["reach"])
+    return_profile = minimum_jerk(counts["return"])
+    trajectories = []
 
-    # Hold at center
-    xyz[:N_HOLD_PRE] = CENTER_XYZ
-
-    # Reach: center -> target via min-jerk
-    for dim in range(3):
-        xyz[N_HOLD_PRE:N_HOLD_PRE+N_REACH, dim] = (
-            CENTER_XYZ[dim] + (target_xyz[dim] - CENTER_XYZ[dim]) * mj
+    for degrees, trajectory_id in DIRECTIONS.items():
+        angle = np.radians(degrees)
+        target = center + reach_cm * np.array([np.cos(angle), np.sin(angle), 0.0])
+        xyz = np.empty((n_total, 3), dtype=np.float32)
+        cursor = 0
+        xyz[cursor:cursor + counts["hold_before"]] = center
+        cursor += counts["hold_before"]
+        xyz[cursor:cursor + counts["reach"]] = (
+            center + (target - center) * reach_profile[:, None]
         )
-
-    # Hold at target
-    xyz[N_HOLD_PRE+N_REACH:
-        N_HOLD_PRE+N_REACH+N_HOLD_MID] = target_xyz
-
-    # Return
-    for dim in range(3):
-        xyz[N_HOLD_PRE+N_REACH+N_HOLD_MID:
-            N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN, dim] = (
-            target_xyz[dim] + (CENTER_XYZ[dim] - target_xyz[dim]) * mj
+        cursor += counts["reach"]
+        xyz[cursor:cursor + counts["hold_target"]] = target
+        cursor += counts["hold_target"]
+        xyz[cursor:cursor + counts["return"]] = (
+            target + (center - target) * return_profile[:, None]
         )
+        cursor += counts["return"]
+        xyz[cursor:] = center
 
-    # Hold at center
-    xyz[N_HOLD_PRE+N_REACH+N_HOLD_MID+N_RETURN:] = CENTER_XYZ
+        output = os.path.join(PATHS_DIR, f"{trajectory_id}.npz")
+        np.savez(
+            output,
+            xyz=xyz,
+            times=times,
+            center_xyz=center,
+            target_xyz=target,
+            rest_posture=np.array(list(rest_pose.values())),
+            trajectory_id=trajectory_id,
+            position_units="cm",
+            coordinate_frame="shoulder_centered_world",
+            sample_rate_hz=sample_rate,
+        )
+        validate_path_artifact(output, config)
+        trajectories.append({
+            "id": trajectory_id,
+            "desired_path": relative_artifact(output),
+            "samples": n_total,
+            "sample_rate_hz": sample_rate,
+        })
+        print(f"  {trajectory_id:<20} {n_total} samples -> {output}")
 
-    # Sanity checks
-    assert np.allclose(xyz[0], xyz[-1], atol=1e-5), \
-        "Start and end should match (hold at center)"
-    assert np.allclose(xyz[0], CENTER_XYZ, atol=1e-5), \
-        "Should start at center"
-    reach_dist = np.linalg.norm(
-        xyz[N_HOLD_PRE+N_REACH-1] - CENTER_XYZ
-    )
+    create_manifest(trajectories)
+    print(f"Generated {len(trajectories)} validated paths and manifest.")
 
-    print(f"  {name:<18}: target XY=({target_xy[0]:+.1f},{target_xy[1]:+.1f}) cm  "
-          f"Z={CENTER_XYZ[2]:.1f} cm  dist={reach_dist:.1f}cm")
 
-    out_path = os.path.join(CENTEROUT_DIR, f"desired_xyz_{name}.npz")
-    np.savez(out_path,
-             xyz=xyz,                    # (1152, 3) lab world frame, cm
-             times=times,
-             center_xyz=CENTER_XYZ,
-             target_xyz=target_xyz,
-             rest_posture=np.array([REST['elv_angle'], REST['shoulder_elv'],
-                                    REST['shoulder_rot'], REST['elbow_flexion']]),
-             direction_deg=deg,
-             direction_name=name)
-
-print()
-print(f"Saved {len(DIRECTION_NAMES)} files to {CENTEROUT_DIR}")
-print("XYZ positions are in lab world frame (shoulder-centered, cm)")
-print("Next: run ikcenterout.py")
+if __name__ == "__main__":
+    generate()

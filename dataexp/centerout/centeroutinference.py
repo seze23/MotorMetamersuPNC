@@ -18,13 +18,13 @@ import yaml
 import numpy as np
 import pandas as pd
 import torch
-import glob
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 
-from paths import REPO_DIR, CENTEROUT_DIR
+from experiment import load_manifest, resolve_artifact, set_artifact
+from paths import REPO_DIR, PREDICTIONS_DIR, FIGURES_DIR
 sys.path.insert(0, REPO_DIR)
 
 from utils.visualize_sample import get_shoulder_elbow_wrist_loc
@@ -39,24 +39,6 @@ MODEL_PATH = os.path.join(
     f"spatiotemporal_4_8-8-32-64_7171_{COEF_SEED}_{TRAIN_SEED}",
 )
 
-TIME_STEPS  = 1152
-SAMPLE_RATE = 240
-
-DIRECTIONS_ORDERED = [
-    "0_right", "45_fwd_right", "90_forward", "135_fwd_left",
-    "180_left", "225_back_left", "270_backward", "315_back_right",
-]
-DIR_COLORS = {
-    "0_right":       "#e74c3c",
-    "45_fwd_right":  "#e67e22",
-    "90_forward":    "#f1c40f",
-    "135_fwd_left":  "#2ecc71",
-    "180_left":      "#1abc9c",
-    "225_back_left": "#3498db",
-    "270_backward":  "#9b59b6",
-    "315_back_right":"#e91e63",
-}
-
 BLACK   = "#1a1a1a"
 CRIMSON = "#c0392b"
 ORANGE  = "#e67e22"
@@ -68,43 +50,44 @@ with open(os.path.join(MODEL_PATH, "config.yaml"), "r") as f:
 model_config = {k: parse_config_value(v) for k, v in model_config.items()}
 print("Model config loaded.")
 
-spindle_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "center_out_*_spindles.npz")))
+manifest = load_manifest()
+spindle_files = [(item["id"], resolve_artifact(item["spindle_data"]))
+                 for item in manifest["trajectories"]]
 if not spindle_files:
-    raise FileNotFoundError(
-        f"No *_spindles.npz files in {CENTEROUT_DIR}"
-    )
+    raise ValueError("The experiment manifest contains no trajectories.")
+trajectory_ids = [item[0] for item in spindle_files]
+colors = plt.cm.hsv(np.linspace(0, 0.9, len(trajectory_ids)))
+direction_colors = dict(zip(trajectory_ids, colors))
 
 print(f"Found {len(spindle_files)} directions:")
-for f in spindle_files:
-    print(f"  {os.path.basename(f)}")
+for trajectory_id, _ in spindle_files:
+    print(f"  {trajectory_id}")
 print()
 
 all_true_xyz = {}
 all_pred_xyz = {}
 summary_rows = []
-t = np.arange(TIME_STEPS) / SAMPLE_RATE
 
-for sp_path in spindle_files:
-    direction = (os.path.basename(sp_path)
-                 .replace("center_out_", "")
-                 .replace("_spindles.npz", ""))
+for direction, sp_path in spindle_files:
     print(f"Running inference: {direction}")
 
     # Load data
     sp_data      = np.load(sp_path, allow_pickle=True)
     chunk_data   = sp_data['firing_rates'].astype(np.float32)  # (1,10,25,1152)
     joint_angles = sp_data['joint_angles']                     # (1152,7) degrees
+    t = sp_data['times'].astype(np.float64)
+    time_steps = len(t)
 
     # Prefer marker positions extracted from the selected OpenSim model.
     # The analytic fallback supports older spindle files.
     if 'wrist_xyz_world' in sp_data:
         wrist_loc = sp_data['wrist_xyz_world']
     else:
-        labels_for_fk = np.zeros((TIME_STEPS, 7), dtype=np.float32)
+        labels_for_fk = np.zeros((time_steps, 7), dtype=np.float32)
         labels_for_fk[:, 3:7] = joint_angles[:, :4]
         _, _, wrist_loc = get_shoulder_elbow_wrist_loc(labels_for_fk)
 
-    labels = np.zeros((1, TIME_STEPS, 7), dtype=np.float32)
+    labels = np.zeros((1, time_steps, 7), dtype=np.float32)
     labels[0, :, 0:3] = wrist_loc
     labels[0, :, 3]   = joint_angles[:, 0]
     labels[0, :, 4]   = joint_angles[:, 1]
@@ -112,7 +95,7 @@ for sp_path in spindle_files:
     labels[0, :, 6]   = joint_angles[:, 3]
 
     # Write temp HDF5 and run inference
-    tmp_hdf5 = os.path.join(CENTEROUT_DIR, f"_tmp_{direction}.hdf5")
+    tmp_hdf5 = os.path.join(PREDICTIONS_DIR, f"_tmp_{direction}.hdf5")
     with h5py.File(tmp_hdf5, "w") as f:
         f.create_dataset("data",   data=chunk_data)
         f.create_dataset("labels", data=labels)
@@ -174,7 +157,8 @@ for sp_path in spindle_files:
         "pred_shoulder_rot_deg":   pred[:, 5],
         "pred_elbow_flexion_deg":  pred[:, 6],
         "l2_distance_cm":          l2,
-    }).to_csv(os.path.join(CENTEROUT_DIR, f"results_{direction}.csv"), index=False)
+    }).to_csv(os.path.join(PREDICTIONS_DIR, f"{direction}.csv"), index=False)
+    set_artifact(direction, "predictions", os.path.join(PREDICTIONS_DIR, f"{direction}.csv"))
 
     # Per-direction 7-panel time series
     plot_cols = [
@@ -218,8 +202,10 @@ for sp_path in spindle_files:
         fontsize=10, y=1.00
     )
     plt.tight_layout()
-    plt.savefig(os.path.join(CENTEROUT_DIR, f"pred_vs_truth_{direction}.png"),
+    prediction_figure = os.path.join(FIGURES_DIR, f"pred_vs_truth_{direction}.png")
+    plt.savefig(prediction_figure,
                 dpi=150, bbox_inches="tight")
+    set_artifact(direction, "prediction_figure", prediction_figure)
     plt.close()
 
     print(f"  elbow RMSE: {elbow_rmse:.2f}°  wrist RMSE: {wrist_rmse:.2f} cm  "
@@ -229,24 +215,20 @@ for sp_path in spindle_files:
 # ============================================================
 # PANEL B: side-by-side XY plane, reach phase only, centered
 # ============================================================
-REACH_START = 396
-REACH_END   = 756   # 396 + 120 reach + 120 hold + 120 return
-
 fig2, (ax_true, ax_pred) = plt.subplots(1, 2, figsize=(12, 6),
                                          sharey=True, sharex=True)
 
-for direction in DIRECTIONS_ORDERED:
+for direction in trajectory_ids:
     if direction not in all_true_xyz:
         continue
-    color = DIR_COLORS.get(direction, "gray")
+    color = direction_colors[direction]
 
-    # Trim to reach phase
-    true_xyz = all_true_xyz[direction][REACH_START:REACH_END]
-    pred_xyz = all_pred_xyz[direction][REACH_START:REACH_END]
+    true_xyz = all_true_xyz[direction]
+    pred_xyz = all_pred_xyz[direction]
 
     # Center at start of reach (common origin for all directions)
-    true_rel = true_xyz - all_true_xyz[direction][REACH_START]
-    pred_rel = pred_xyz - all_pred_xyz[direction][REACH_START]
+    true_rel = true_xyz - true_xyz[0]
+    pred_rel = pred_xyz - pred_xyz[0]
 
     ax_true.plot(true_rel[:, 0], true_rel[:, 1], c=color,
                  linewidth=2.0, alpha=0.85, label=direction.replace("_", " "))
@@ -280,7 +262,7 @@ fig2.suptitle(
     fontsize=10, y=1.02
 )
 plt.tight_layout()
-plt.savefig(os.path.join(CENTEROUT_DIR, "panel_b_trajectories.png"),
+plt.savefig(os.path.join(FIGURES_DIR, "trajectory_comparison.png"),
             dpi=150, bbox_inches="tight")
 plt.close()
 print("Saved panel_b_trajectories.png")
@@ -290,7 +272,7 @@ print("Saved panel_b_trajectories.png")
 # ============================================================
 summary_df = pd.DataFrame(summary_rows)
 summary_df.to_csv(
-    os.path.join(CENTEROUT_DIR, "summary_all_directions.csv"), index=False
+    os.path.join(PREDICTIONS_DIR, "summary.csv"), index=False
 )
 
 print()

@@ -20,17 +20,13 @@ Output: dataexp/centerout/ik_<direction>.npz
 import opensim as osm
 import numpy as np
 import os
-import glob
 import sys
 import pandas as pd
-import tempfile
 
-from paths import REPO_DIR, CENTEROUT_DIR, MODEL_PATH
+from experiment import load_manifest, resolve_artifact, set_artifact, validate_path_artifact
+from paths import REPO_DIR, IK_DIR, MODEL_PATH
 
 sys.path.insert(0, REPO_DIR)
-
-SAMPLE_RATE = 240
-N_TOTAL     = 1152
 
 # shoulder_to_world from lab code
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
@@ -81,13 +77,14 @@ def write_trc(filepath, times, handle_xyz_osim):
     handle_xyz_osim: (N, 3) in OpenSim ground frame, meters
     """
     n = len(times)
+    sample_rate = 1.0 / np.median(np.diff(times))
     with open(filepath, 'w') as f:
         # TRC header
         f.write("PathFileType\t4\t(X/Y/Z)\t" + filepath + "\n")
         f.write("DataRate\tCameraRate\tNumFrames\tNumMarkers\t"
                 "Units\tOrigDataRate\tOrigDataStartFrame\tOrigNumFrames\n")
-        f.write(f"{SAMPLE_RATE}\t{SAMPLE_RATE}\t{n}\t1\t"
-                f"m\t{SAMPLE_RATE}\t1\t{n}\n")
+        f.write(f"{sample_rate}\t{sample_rate}\t{n}\t1\t"
+                f"m\t{sample_rate}\t1\t{n}\n")
         f.write("Frame#\tTime\tHandle\t\t\n")
         f.write("\t\tX1\tY1\tZ1\n")
         f.write("\n")
@@ -109,32 +106,29 @@ def load_mot_joint_angles(mot_path):
 # ----------------------------------------------------------------
 # 4. Run IK for each direction
 # ----------------------------------------------------------------
-xyz_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, "desired_xyz_*.npz")))
-if not xyz_files:
-    raise FileNotFoundError(f"No desired_xyz_*.npz in {CENTEROUT_DIR}")
-
-print(f"Found {len(xyz_files)} directions:")
-for f in xyz_files:
-    print(f"  {os.path.basename(f)}")
+manifest = load_manifest()
+trajectories = manifest["trajectories"]
+print(f"Found {len(trajectories)} trajectories:")
+for trajectory in trajectories:
+    print(f"  {trajectory['id']}")
 print()
 
-for xyz_path in xyz_files:
-    name     = os.path.basename(xyz_path).replace("desired_xyz_","").replace(".npz","")
-    out_npz  = os.path.join(CENTEROUT_DIR, f"ik_{name}.npz")
-    trc_path = os.path.join(CENTEROUT_DIR, f"_tmp_{name}.trc")
-    mot_path = os.path.join(CENTEROUT_DIR, f"_tmp_{name}.mot")
+for trajectory in trajectories:
+    name = trajectory["id"]
+    xyz_path = resolve_artifact(trajectory["desired_path"])
+    out_npz = os.path.join(IK_DIR, f"{name}.npz")
+    trc_path = os.path.join(IK_DIR, f"_tmp_{name}.trc")
+    mot_path = os.path.join(IK_DIR, f"_tmp_{name}.mot")
 
     print(f"Running IK: {name}")
 
-    d           = np.load(xyz_path, allow_pickle=True)
-    xyz_world   = d['xyz'].astype(np.float64)   # (1152, 3) world frame, cm
-    times       = d['times'].astype(np.float64)  # (1152,)
-    center_xyz  = d['center_xyz'].astype(np.float64)
+    xyz_world, times = validate_path_artifact(xyz_path)
+    n_total = len(times)
 
     # Convert world frame (shoulder-centered, cm) -> OpenSim ground (meters, absolute)
     # world_pos is shoulder-centered, so add shoulder_osim after rotating
-    handle_xyz_osim = np.zeros((N_TOTAL, 3))
-    for i in range(N_TOTAL):
+    handle_xyz_osim = np.zeros((n_total, 3))
+    for i in range(n_total):
         world_cm   = xyz_world[i]              # (3,) shoulder-centered, cm
         osim_rel   = W2S @ world_cm / 100.0   # (3,) OpenSim relative, meters
         handle_xyz_osim[i] = osim_rel + shoulder_osim  # absolute OpenSim
@@ -178,7 +172,7 @@ for xyz_path in xyz_files:
     print(f"  Rows: {len(df)}")
 
     # Extract joint angles for the 4 driven coordinates + store all 7
-    joint_angles = np.zeros((N_TOTAL, 7), dtype=np.float32)
+    joint_angles = np.zeros((n_total, 7), dtype=np.float32)
     for j, cname in enumerate(COORD_NAMES):
         if cname in df.columns:
             vals = df[cname].to_numpy()
@@ -186,7 +180,7 @@ for xyz_path in xyz_files:
             # Check magnitude to determine
             if np.abs(vals).max() < 10:  # radians
                 vals = np.degrees(vals)
-            joint_angles[:len(vals), j] = vals[:N_TOTAL]
+            joint_angles[:len(vals), j] = vals[:n_total]
 
     # Sanity check
     print(f"  Joint angle ranges:")
@@ -194,24 +188,12 @@ for xyz_path in xyz_files:
         print(f"    {cname}: {joint_angles[:,j].min():.1f} -> "
               f"{joint_angles[:,j].max():.1f} deg")
 
-    # Check reach amplitude using lab FK
-    from utils.visualize_sample import get_shoulder_elbow_wrist_loc
-    labels_fk = np.zeros((N_TOTAL, 7), dtype=np.float32)
-    for j in range(4):
-        labels_fk[:, j+3] = joint_angles[:, j]
-    _, _, wrists = get_shoulder_elbow_wrist_loc(labels_fk)
-    peak    = wrists[396+120]
-    center  = wrists[396]
-    delta   = peak - center
-    reach_xy = np.linalg.norm(delta[:2])
-    z_drift  = abs(delta[2])
-    print(f"  Peak reach: XY={reach_xy:.2f}cm  Z_drift={z_drift:.2f}cm")
-
     # Save
     np.savez(out_npz,
              joint_angles=joint_angles,   # (N, 7) degrees, all 7 coords
              times=times,
-             direction_name=name)
+             trajectory_id=name)
+    set_artifact(name, "ik_solution", out_npz)
 
     # Cleanup temp files
     for tmp in [trc_path, mot_path]:

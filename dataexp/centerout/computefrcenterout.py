@@ -14,21 +14,18 @@ import os
 import sys
 import yaml
 import numpy as np
-import glob
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
-from paths import REPO_DIR, CENTEROUT_DIR
+from experiment import load_manifest, resolve_artifact, set_artifact
+from paths import REPO_DIR, SPINDLES_DIR, FIGURES_DIR
 CONFIG_PATH   = os.path.join(REPO_DIR, "extract_data/configs/train_test_data_spindles_extended.yaml")
 
 sys.path.insert(0, REPO_DIR)
 from utils.spindle_FR_helper import normalize, load_coefficients, get_sampled_coefficients
 from extract_data.generate_train_test_data import process_chunk
-
-SAMPLE_RATE = 240
-dt          = 1.0 / SAMPLE_RATE
 
 MUSCLE_NAMES = [
     'CORB',    'DELT1',   'DELT2',    'DELT3',  'INFSP',
@@ -61,27 +58,23 @@ sampled_coefficients = get_sampled_coefficients(
 print("Spindle coefficients loaded.")
 print()
 
-# Find all fiber length npz files (exclude spindle outputs)
-npz_files = sorted([
-    f for f in glob.glob(os.path.join(CENTEROUT_DIR, "center_out_*.npz"))
-    if "_spindles" not in f
-])
-
+trajectories = load_manifest()["trajectories"]
+npz_files = [(item["id"], resolve_artifact(item["muscle_data"]))
+             for item in trajectories]
 if not npz_files:
-    raise FileNotFoundError(f"No center_out_*.npz files in {CENTEROUT_DIR}")
+    raise ValueError("The experiment manifest contains no trajectories.")
 
 print(f"Found {len(npz_files)} directions:")
-for f in npz_files:
-    print(f"  {os.path.basename(f)}")
+for trajectory_id, _ in npz_files:
+    print(f"  {trajectory_id}")
 print()
 
 ia_colors = plt.cm.Reds(np.linspace(0.4, 0.9, 5))
 ii_colors = plt.cm.Blues(np.linspace(0.4, 0.9, 5))
 
-for npz_path in npz_files:
-    direction = os.path.basename(npz_path).replace("center_out_","").replace(".npz","")
-    out_npz   = os.path.join(CENTEROUT_DIR, f"center_out_{direction}_spindles.npz")
-    out_png   = os.path.join(CENTEROUT_DIR, f"spindles_{direction}.png")
+for direction, npz_path in npz_files:
+    out_npz = os.path.join(SPINDLES_DIR, f"{direction}.npz")
+    out_png = os.path.join(FIGURES_DIR, f"spindles_{direction}.png")
 
     print(f"Processing: {direction}")
 
@@ -89,6 +82,8 @@ for npz_path in npz_files:
     fiber_lengths = d['fiber_lengths']    # (1152, 25) mm
     joint_angles  = d['joint_angles']     # (1152, 7) degrees
     times         = d['times']
+    dt = float(np.median(np.diff(times)))
+    sample_rate = 1.0 / dt
     # Pass through wrist/elbow world positions for inference script
     wrist_xyz_world = d['wrist_xyz_world'] if 'wrist_xyz_world' in d else None
     elbow_xyz_world = d['elbow_xyz_world'] if 'elbow_xyz_world' in d else None
@@ -129,10 +124,12 @@ for npz_path in npz_files:
     if elbow_xyz_world is not None:
         save_kwargs['elbow_xyz_world'] = elbow_xyz_world
     np.savez(out_npz, **save_kwargs)
+    set_artifact(direction, "spindle_data", out_npz)
+    set_artifact(direction, "spindle_figure", out_png)
     print(f"  Saved {os.path.basename(out_npz)}")
 
     # --- Spindle firing rate figure: 2 rows x 3 muscles ---
-    t_plot    = np.arange(chunk_data.shape[3]) / SAMPLE_RATE
+    t_plot = times
     n_muscles = len(PLOT_MUSCLES)
 
     fig, axes = plt.subplots(2, n_muscles, figsize=(5*n_muscles, 7), sharex=True,

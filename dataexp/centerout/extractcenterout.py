@@ -6,13 +6,13 @@ result; this is especially effective for the long hold periods.
 """
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
-import glob
 import os
 
 import numpy as np
 import opensim as osm
 
-from paths import CENTEROUT_DIR, MODEL_PATH
+from experiment import load_manifest, resolve_artifact, set_artifact
+from paths import MODEL_PATH, MUSCLES_DIR
 
 MUSCLE_NAMES = [
     'CORB', 'DELT1', 'DELT2', 'DELT3', 'INFSP',
@@ -36,10 +36,10 @@ def _vec3_to_numpy(value):
     return np.array([value.get(0), value.get(1), value.get(2)])
 
 
-def process_motion(mot_path):
+def process_motion(trajectory_id, mot_path):
     """Process one motion in an isolated OpenSim model/state."""
-    direction = os.path.basename(mot_path).replace('center_out_', '').replace('.mot', '')
-    out_npz = os.path.join(CENTEROUT_DIR, f'center_out_{direction}.npz')
+    direction = trajectory_id
+    out_npz = os.path.join(MUSCLES_DIR, f'{direction}.npz')
 
     model = osm.Model(MODEL_PATH)
     state = model.initSystem()
@@ -118,28 +118,32 @@ def process_motion(mot_path):
         'unique_poses': len(pose_cache),
         'bic_std_mm': float(bic_std),
         'reach_cm': float(reach_dist),
+        'output': out_npz,
     }
 
 
 def main():
-    mot_files = sorted(glob.glob(os.path.join(CENTEROUT_DIR, 'center_out_*.mot')))
-    if not mot_files:
-        raise FileNotFoundError(f'No center_out_*.mot files found in {CENTEROUT_DIR}')
+    trajectories = load_manifest()["trajectories"]
+    jobs = [(item["id"], resolve_artifact(item["motion"]))
+            for item in trajectories]
+    if not jobs:
+        raise ValueError('The experiment manifest contains no trajectories.')
 
     requested_workers = int(os.environ.get('CENTEROUT_WORKERS', '4'))
-    workers = max(1, min(requested_workers, len(mot_files)))
-    print(f'Extracting {len(mot_files)} motions with {workers} worker(s)...')
+    workers = max(1, min(requested_workers, len(jobs)))
+    print(f'Extracting {len(jobs)} motions with {workers} worker(s)...')
 
     if workers == 1:
-        results = [process_motion(path) for path in mot_files]
+        results = [process_motion(*job) for job in jobs]
     else:
         results = []
         with ProcessPoolExecutor(max_workers=workers) as executor:
-            futures = {executor.submit(process_motion, path): path for path in mot_files}
+            futures = {executor.submit(process_motion, *job): job for job in jobs}
             for future in as_completed(futures):
                 results.append(future.result())
 
     for result in sorted(results, key=lambda item: item['direction']):
+        set_artifact(result['direction'], 'muscle_data', result['output'])
         reused = result['frames'] - result['unique_poses']
         print(
             f"  {result['direction']:<20} {result['frames']} frames, "

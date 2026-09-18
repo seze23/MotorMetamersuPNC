@@ -1,0 +1,21 @@
+experiment: center_out
+
+path:
+  # Any Python generator can be selected here. A future `draw.py` generator
+  # will open a GUI for drawing and naming paths interactively.
+  generator: dataexp/centerout/generatereachpath.py
+  sample_rate_hz: 240
+  reach_cm: 10.0
+  max_displacement_cm: 15.0
+  rest_pose_degrees:
+    elv_angle: 20.0
+    shoulder_elv: 40.0
+    shoulder_rot: 25.0
+    elbow_flexion: 85.0
+  timing_seconds:
+    hold_before: 1.65
+    reach: 0.50
+    hold_target: 0.50
+    return: 0.50
+    hold_after: 1.65
+

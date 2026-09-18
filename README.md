@@ -24,16 +24,16 @@ trained_models/
 
 ## Run
 
-Run the default `center_out` experiment:
+Run the default experiment described by `experiments/center_out.yaml`:
 
 ```powershell
-python run_pipeline.py --experiment center_out
+python run_pipeline.py --config experiments/center_out.yaml
 ```
 
 Use `--through muscle-signals` when the trained checkpoint is not available:
 
 ```powershell
-python run_pipeline.py --experiment center_out --through muscle-signals
+python run_pipeline.py --config experiments/center_out.yaml --through muscle-signals
 ```
 
 All generated files are isolated beneath the named experiment directory:
@@ -41,20 +41,24 @@ All generated files are isolated beneath the named experiment directory:
 ```text
 outputs/
   center_out/
-    desired_xyz_*.npz
-    ik_*.npz
-    center_out_*.mot
-    center_out_*.npz
-    center_out_*_spindles.npz
+    manifest.yaml
+    paths/
+    ik/
+    motions/
+    muscles/
+    spindles/
+    predictions/
+    figures/
   new_experiment_name/
     ...
 ```
 
-For a new path experiment, change the trajectory definition and choose a new
-name so existing results are not overwritten:
+For a new experiment, copy the YAML, give it a unique `experiment` value, and
+change its path parameters or generator. `--experiment` can still override the
+name without editing the YAML:
 
 ```powershell
-python run_pipeline.py --experiment new_experiment_name --through muscle-signals
+python run_pipeline.py --config experiments/my_paths.yaml --through muscle-signals
 ```
 
 Names may contain letters, numbers, underscores, and hyphens, and must begin
@@ -74,10 +78,39 @@ appearance only, not IK, muscle equilibrium, or spindle calculations.
 5. `computefrcenterout.py`: convert length, velocity, and acceleration to Ia/II firing rates.
 6. `centeroutinference.py`: use the pretrained CNN to predict wrist and joint state.
 
-The trajectory is defined in `dataexp/centerout/generatereachpath.py`. To make
-a new path, replace the generated `(N, 3)` `xyz` array while preserving units
-(centimeters), coordinate convention, and a matching `times` array. The IK
-stage consumes every `outputs/desired_xyz_*.npz` file automatically.
+## Path-generator contract
+
+The generator is selected by `path.generator` in the experiment YAML. The
+built-in `generatereachpath.py` reads all trajectory parameters from that YAML,
+including sample rate, reach size, rest pose, and phase durations. Setting the
+generator to `dataexp/centerout/draw.py` will open a GUI in which paths can be
+drawn and named interactively (when that optional generator is installed).
+
+A generator may create any number of paths and choose their names at runtime.
+It must write one `.npz` per path beneath the experiment's `paths/` directory,
+then create `manifest.yaml` with `create_manifest()` from
+`dataexp.centerout.experiment`. Each path artifact must contain:
+
+- `xyz`: a finite `(N, 3)` array in shoulder-centered world coordinates, in cm.
+- `times`: a finite `(N,)` array in seconds, with strictly increasing values.
+- Optional metadata such as `sample_rate_hz`, `center_world_cm`, and a path ID.
+
+Call `validate_path_artifact()` before adding a path to the manifest. It checks
+shape, time ordering, finite values, and the YAML's `max_displacement_cm` reach
+limit. Paths may have different durations and sample rates; every downstream
+stage now obtains timing and array sizes from the artifact instead of assuming
+1,152 samples at 240 Hz. The current inference checkpoint may still require a
+specific temporal distribution even though the pipeline itself does not.
+
+The manifest is the handoff between stages. Downstream scripts process only its
+listed artifacts and add their own entries (`ik_solution`, `motion`,
+`muscle_data`, `spindle_data`, and predictions). This lets a generator decide
+path count and names dynamically without predeclaring them in YAML.
+
+To implement another generator, use `generatereachpath.py` as a compact
+reference: load `CONFIG`, build `xyz` and `times`, save beneath `PATHS_DIR`,
+validate each file, and finally create the manifest. Do not hard-code output
+directories, path names, sample counts, phase boundaries, or sampling rates.
 
 ## Changing the OpenSim model
 
