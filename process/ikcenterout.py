@@ -119,6 +119,12 @@ IK_CONFIG = EXPERIMENT_CONFIG.get("ik", {})
 COORDINATE_REGULARIZATION_WEIGHT = float(
     IK_CONFIG.get("coordinate_regularization_weight", 0.001)
 )
+LOCK_WRIST = bool(IK_CONFIG.get("lock_wrist", True))
+LOCKED_WRIST_DEGREES = IK_CONFIG.get("locked_wrist_degrees", {
+    "pro_sup": 0.0,
+    "deviation": 0.0,
+    "flexion": 0.0,
+})
 
 # All 7 MoBL-ARMS coordinates in order (for reading .mot output)
 COORD_NAMES = ["elv_angle", "shoulder_elv", "shoulder_rot",
@@ -129,6 +135,11 @@ COORD_NAMES = ["elv_angle", "shoulder_elv", "shoulder_rot",
 # ----------------------------------------------------------------
 print("Loading model and computing shoulder position at rest...")
 model      = osm.Model(MODEL_PATH)
+if LOCK_WRIST:
+    for coordinate_name, degrees in LOCKED_WRIST_DEGREES.items():
+        coordinate = model.getCoordinateSet().get(coordinate_name)
+        coordinate.setDefaultValue(np.radians(float(degrees)))
+        coordinate.setDefaultLocked(True)
 init_state = model.initSystem()
 coord_set  = model.getCoordinateSet()
 marker_set = model.getMarkerSet()

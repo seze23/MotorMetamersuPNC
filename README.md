@@ -124,6 +124,47 @@ Because the IK stage tracks only the hand marker, it also applies a very small
 rest-pose coordinate weight (`ik.coordinate_regularization_weight`) to select a
 stable solution among the many joint postures that can place the hand at the
 same point. Set the weight to `0` to recover unregularized one-marker IK.
+Set `ik.lock_wrist: true` to brace `pro_sup`, `deviation`, and `flexion` at the
+values in `ik.locked_wrist_degrees`. This prevents position-only OpenSim IK from
+using unobserved wrist motion to reach the Handle marker. It locks the hand to
+the forearm; the entire rigid hand can still rotate in the world as the arm
+moves. The Nimble backend currently requires this setting because its derived
+model welds the unsupported distal wrist joints. The supplied experiment
+configs use the visually calibrated KINARM bottle-grip pose `pro_sup: -30`,
+with zero wrist flexion/deviation. Path generation uses the same brace pose
+when calculating the resting Handle location.
+
+### Differentiable Nimble IK
+
+Set `ik.backend: nimble` in either experiment YAML (or in the notebook's YAML
+configuration cell) to run `process/nimble_ik.py`; `opensim` retains the legacy
+IK tool. Nimble has no native Windows package, so `Pipeline` launches the WSL
+distribution and Python named by `ik.nimble.wsl_distribution` and
+`ik.nimble.python`. The current machine uses:
+
+```text
+Ubuntu
+/home/braydenk/.venvs/motor-meta-nimble/bin/python
+```
+
+That environment contains `nimblephysics==0.10.52.1`, `torch==2.5.1+cpu`, and
+`numpy==1.26.4`. NumPy 2.x is not ABI-compatible with this Nimble wheel.
+
+`NimbleArmIK.solve(path_tensor)` is the importable differentiable API. It uses
+Nimble's exact Handle forward kinematics and Jacobian in fixed damped
+Gauss-Newton steps, so a later PyTorch loss can backpropagate to the path. The
+ordinary multi-stage pipeline saves the result to NPZ, which necessarily ends
+the computation graph; end-to-end optimization must call this API in one WSL
+Python process.
+
+Nimble cannot import the original model's non-Euler radiocarpal joint. At run
+time the module creates an experiment-local model derivative, welds the two
+distal wrist joints at their zero pose, and adds a welded body at the Handle
+marker because `IKMapping` maps body origins. The original `.osim` is untouched.
+All shoulder/scapula coordinate couplers are reproduced as differentiable
+linear maps. This is suitable for the present four-coordinate reaching task,
+where wrist coordinates remain zero, but it is not a general wrist-motion
+replacement.
 
 A generator may create any number of paths and choose their names at runtime.
 It must write one `.npz` per path beneath the experiment's `paths/` directory,

@@ -30,7 +30,10 @@ def model_rest_center(rest_pose):
     model = osm.Model(MODEL_PATH)
     state = model.initSystem()
     coordinates = model.getCoordinateSet()
-    for name, degrees in rest_pose.items():
+    pose = dict(rest_pose)
+    if EXPERIMENT_CONFIG.get("ik", {}).get("lock_wrist", True):
+        pose.update(EXPERIMENT_CONFIG.get("ik", {}).get("locked_wrist_degrees", {}))
+    for name, degrees in pose.items():
         coordinates.get(name).setValue(state, np.radians(degrees))
     model.realizePosition(state)
     markers = model.getMarkerSet()

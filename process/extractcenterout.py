@@ -21,11 +21,11 @@ MUSCLE_NAMES = [
     'ANC', 'BIClong', 'BICshort', 'BRA', 'BRD',
     'ECRL', 'PT', 'TRIlat', 'TRIlong', 'TRImed',
 ]
-COORD_ORDER = ['elv_angle', 'shoulder_elv', 'shoulder_rot', 'elbow_flexion']
 COORD_LABEL_ORDER = [
     'elv_angle', 'shoulder_elv', 'shoulder_rot',
     'elbow_flexion', 'pro_sup', 'deviation', 'flexion',
 ]
+COORD_ORDER = COORD_LABEL_ORDER
 SHOULDER_MARKER = 'R.Shoulder'
 ELBOW_MARKER = 'R.Elbow.Lateral'
 WRIST_MARKER = 'Handle'

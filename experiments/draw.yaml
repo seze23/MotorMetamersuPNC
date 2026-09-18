@@ -8,8 +8,23 @@ visualization:
   ground_height_m: -1.0
 
 ik:
+  # Select "nimble" for differentiable IK or "opensim" for the legacy tool.
+  backend: opensim
+  # Rigidly brace wrist motion and forearm rotation, as in the KINARM setup.
+  lock_wrist: true
+  locked_wrist_degrees:
+    # KINARM grip: the palm/opening faces upward; wrist bend remains neutral.
+    pro_sup: -30.0
+    deviation: 0.0
+    flexion: 0.0
   # Keeps the underconstrained one-marker IK solution near the configured pose.
   coordinate_regularization_weight: 0.001
+  nimble:
+    wsl_distribution: Ubuntu
+    python: /home/braydenk/.venvs/motor-meta-nimble/bin/python
+    iterations: 12
+    damping: 0.00001
+    posture_weight: 0.00001
 
 path:
   # draw.py opens a GUI. Draw, name, save, and submit paths to continue.

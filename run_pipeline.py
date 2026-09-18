@@ -71,8 +71,41 @@ class Pipeline:
             return self.generator
         return SCRIPT_DIR / dict(STAGES)[stage]
 
+    def _ik_backend(self):
+        backend = str(self.config.get("ik", {}).get("backend", "opensim")).lower()
+        if backend not in {"opensim", "nimble"}:
+            raise ValueError("ik.backend must be either 'opensim' or 'nimble'")
+        return backend
+
+    @staticmethod
+    def _wsl_path(path, distribution):
+        path = Path(path).resolve()
+        if not path.drive:
+            raise ValueError(f"Cannot translate path to WSL: {path}")
+        drive = path.drive.rstrip(":").lower()
+        tail = path.as_posix().split(":", 1)[1].lstrip("/")
+        return f"/mnt/{drive}/{tail}"
+
+    def _nimble_command(self):
+        options = self.config.get("ik", {}).get("nimble", {})
+        distribution = options.get("wsl_distribution", "Ubuntu")
+        python = options.get(
+            "python", "/home/braydenk/.venvs/motor-meta-nimble/bin/python"
+        )
+        script = self._wsl_path(SCRIPT_DIR / "nimble_ik.py", distribution)
+        config = self._wsl_path(self.config_path, distribution)
+        return [
+            "wsl", "-d", distribution, "--", "env",
+            f"MOTOR_META_EXPERIMENT={self.experiment}",
+            f"MOTOR_META_CONFIG={config}",
+            python, script,
+        ]
+
     def run_stage(self, stage):
         """Run exactly one stage and return its completed process."""
+        if stage == "inverse-kinematics" and self._ik_backend() == "nimble":
+            print("\n=== inverse-kinematics: Nimble Physics (WSL) ===", flush=True)
+            return subprocess.run(self._nimble_command(), cwd=ROOT, check=True)
         script = self._script_for(stage)
         print(f"\n=== {stage}: {script} ===", flush=True)
         return subprocess.run(
