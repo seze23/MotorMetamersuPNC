@@ -71,6 +71,27 @@ appearance only, not IK, muscle equilibrium, or spindle calculations.
 
 ## Stages
 
+Pipeline code is organized independently of the original center-out experiment:
+
+```text
+process/
+  generate_paths/
+    generatereachpath.py
+    draw.py
+  utils/
+  paths.py
+  experiment.py
+  ikcenterout.py
+  gencenterout.py
+  extractcenterout.py
+  computefrcenterout.py
+  centeroutinference.py
+```
+
+`generate_paths/` contains interchangeable path producers. The remaining files
+consume the experiment manifest and therefore do not need to know which path
+generator was used.
+
 1. `generatereachpath.py`: define desired wrist XYZ samples.
 2. `ikcenterout.py`: use OpenSim inverse kinematics to solve joint angles.
 3. `gencenterout.py`: write the joint trajectory as OpenSim `.mot` files.
@@ -83,13 +104,13 @@ appearance only, not IK, muscle equilibrium, or spindle calculations.
 The generator is selected by `path.generator` in the experiment YAML. The
 built-in `generatereachpath.py` reads all trajectory parameters from that YAML,
 including sample rate, reach size, rest pose, and phase durations. Setting the
-generator to `dataexp/centerout/draw.py` will open a GUI in which paths can be
+generator to `process/generate_paths/draw.py` will open a GUI in which paths can be
 drawn and named interactively (when that optional generator is installed).
 
 A generator may create any number of paths and choose their names at runtime.
 It must write one `.npz` per path beneath the experiment's `paths/` directory,
 then create `manifest.yaml` with `create_manifest()` from
-`dataexp.centerout.experiment`. Each path artifact must contain:
+`process.experiment`. Each path artifact must contain:
 
 - `xyz`: a finite `(N, 3)` array in shoulder-centered world coordinates, in cm.
 - `times`: a finite `(N,)` array in seconds, with strictly increasing values.
@@ -107,14 +128,167 @@ listed artifacts and add their own entries (`ik_solution`, `motion`,
 `muscle_data`, `spindle_data`, and predictions). This lets a generator decide
 path count and names dynamically without predeclaring them in YAML.
 
-To implement another generator, use `generatereachpath.py` as a compact
+To implement another generator, use `process/generate_paths/generatereachpath.py` as a compact
 reference: load `CONFIG`, build `xyz` and `times`, save beneath `PATHS_DIR`,
 validate each file, and finally create the manifest. Do not hard-code output
 directories, path names, sample counts, phase boundaries, or sampling rates.
 
+## Training a model
+
+Training is a separate workflow from `run_pipeline.py`. The simplified branch
+contains the data conversion, dataset, network, training, and inference helper
+modules, but it does not contain the original large raw training HDF5 file or a
+one-command training launcher.
+
+The relevant files have these roles:
+
+- `extract_data/generate_train_test_data.py` converts biomechanical simulation
+  data into spindle firing-rate inputs and seven-value trajectory labels.
+- `extract_data/configs/train_test_data_spindles_extended.yaml` defines the
+  muscles, optimal fiber lengths, spindle coefficients, sample rate, temporal
+  length, and Ia/II afferent count used during conversion.
+- `train/new_spindle_dataset.py` loads the converted HDF5 file and makes a
+  deterministic 90% training / 10% validation split. It loads the entire file
+  into memory.
+- `model/model_definitions.py` defines the spatiotemporal CNN and its causal
+  variant.
+- `train/train_model_utils.py` provides `Trainer`, normalization, checkpointing,
+  validation, early stopping, and `config.yaml` generation. It is a library,
+  not an executable training script.
+- `inference/test_model_utils_new.py` reconstructs a model from `config.yaml`,
+  loads `model.ckpt`, and evaluates it. It is also a library.
+- `process/centeroutinference.py` is the pipeline's executable inference stage.
+
+### 1. Supply the raw biomechanical training data
+
+The converter expects one HDF5 file with these datasets:
+
+```text
+muscle_lengths       (trials, 25, time)
+muscle_velocities    (trials, 25, time)
+muscle_accelerations (trials, 25, time)
+endeffector_coords   (trials, 3, time)
+joint_coords         (trials, 4, time)
+```
+
+Lengths, velocities, muscle ordering, coordinate conventions, and joint order
+must match the YAML and the inference pipeline. The raw training file is not
+included in this branch; outputs from a few path experiments are not enough to
+reproduce the original 30,000-trial training set.
+
+### 2. Convert lengths into spindle inputs
+
+Review the extraction YAML before running this. Its default output has 5 Ia and
+5 II channels for each of 25 muscles, 1,152 samples at 240 Hz, and labels
+ordered as wrist XYZ followed by four joint angles.
+
+```powershell
+python -m extract_data.generate_train_test_data `
+  --config_path extract_data/configs/train_test_data_spindles_extended.yaml `
+  --input_file C:/path/to/raw_training_data.hdf5 `
+  --output_dir C:/path/to/processed_data `
+  --seeds 0 `
+  --n_aff 5
+```
+
+The result contains:
+
+```text
+data    (trials, 10, 25, 1152)
+labels  (trials, 1152, 7)
+```
+
+The converter currently caps processing at 30,000 trials and skips an output
+file if it already exists. `--seeds` changes which spindle coefficient samples
+are selected; it does not split the dataset.
+
+### 3. Construct and train the network
+
+Create a small launcher that instantiates the provided classes. This example
+matches the architecture and naming convention expected by the current
+pipeline checkpoint:
+
+```python
+import torch
+
+from model.model_definitions import SpatiotemporalNetworkCausal
+from train.new_spindle_dataset import SpindleDataset
+from train.train_model_utils import Trainer
+
+dataset = SpindleDataset(
+    r"C:\path\to\processed_data\optimized_linear_extended_0_5_5_data.hdf5",
+    dataset_type="train",
+    task="letter_reconstruction_joints",
+    n_out_time=1152,
+)
+
+model = SpatiotemporalNetworkCausal(
+    experiment_id="causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints",
+    nclasses=7,
+    arch_type="spatiotemporal",
+    nlayers=4,
+    n_skernels=[8, 8, 32, 64],
+    n_tkernels=[8, 8, 32, 64],
+    s_kernelsize=7,
+    t_kernelsize=7,
+    s_stride=1,
+    t_stride=1,
+    padding=3,
+    input_shape=[10, 25, 1152],
+    p_drop=0.0,
+    seed=0,
+    training_seed=9,
+    task="letter_reconstruction_joints",
+    outtime=1152,
+    my_dir="trained_models",
+)
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+trainer = Trainer(model=model, dataset=dataset, device=device)
+trainer.train(
+    num_epochs=100,
+    learning_rate=5e-4,
+    batch_size=256,
+    val_steps=100,
+    normalize=True,
+)
+```
+
+Save that example as a script at the repository root and run it from there so
+the package imports resolve. Training writes `model.ckpt`, `config.yaml`, and a
+training plot beneath the model directory in `trained_models/`. GPU training is
+strongly recommended for a full dataset.
+
+Architecture, input shape, output count, task, normalization, afferent count,
+muscle order, spindle seed, and training seed all become part of checkpoint
+compatibility. If any of these change, do not point inference at the old
+checkpoint.
+
+### 4. Run inference with the trained checkpoint
+
+Set `MODEL_PATH` in `process/centeroutinference.py` to the directory containing
+the new `config.yaml` and `model.ckpt`, then run the normal pipeline:
+
+```powershell
+python run_pipeline.py --config experiments/center_out.yaml
+```
+
+To rerun only inference after earlier stages already populated the manifest:
+
+```powershell
+$env:MOTOR_META_CONFIG = (Resolve-Path experiments/center_out.yaml).Path
+$env:MOTOR_META_EXPERIMENT = "center_out"
+python process/centeroutinference.py
+```
+
+The pipeline inference stage builds an in-memory-compatible test HDF5 for each
+trajectory, loads it with `SpindleDataset`, reconstructs the causal network from
+the checkpoint configuration, and writes predictions and figures under the
+experiment output directory.
+
 ## Changing the OpenSim model
 
-Set `MODEL_PATH` in `dataexp/centerout/paths.py`. A replacement model must
+Set `MODEL_PATH` in `process/paths.py`. A replacement model must
 provide the following model-specific parameters, either under the current names
 or through an adapter that maps them to this canonical interface.
 

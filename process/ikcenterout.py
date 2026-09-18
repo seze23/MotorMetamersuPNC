@@ -12,9 +12,9 @@ This produces biomechanically plausible joint angle trajectories
 consistent with the MoBL-ARMS model constraints -- same approach
 as OpenSim's GUI IK tool.
 
-Output: dataexp/centerout/ik_<direction>.npz
-  - joint_angles: (1152, 7) degrees -- all coordinates
-  - times: (1152,)
+Output: outputs/<experiment>/ik/<trajectory>.npz
+  - joint_angles: (N, 7) degrees -- all coordinates
+  - times: (N,)
 """
 
 import opensim as osm

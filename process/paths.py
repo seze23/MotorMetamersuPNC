@@ -1,9 +1,7 @@
-"""Cluster path configuration for the center-out pipeline.
+"""Shared path configuration for the experiment pipeline.
 
 Counterpart to the local-workspace paths.py — same interface
-(REPO_DIR, CENTEROUT_DIR, MODEL_PATH) so generatereachpath.py, ikcenterout.py,
-gencenterout.py, extractcenterout.py, computefrcenterout.py, and
-centeroutinference.py run unmodified in both environments.
+(REPO_DIR, CENTEROUT_DIR, MODEL_PATH) shared by every processing stage.
 """
 
 import os
@@ -11,7 +9,7 @@ from pathlib import Path
 import re
 import yaml
 
-REPO_DIR = str(Path(__file__).resolve().parents[2])
+REPO_DIR = str(Path(__file__).resolve().parents[1])
 CONFIG_PATH = os.environ.get(
     "MOTOR_META_CONFIG", os.path.join(REPO_DIR, "experiments", "center_out.yaml")
 )

@@ -1,4 +1,4 @@
-"""Extract muscle fiber lengths and marker positions from center-out motions.
+"""Extract muscle fiber lengths and marker positions from experiment motions.
 
 Independent motion files are processed in separate processes. Within each
 motion, exact duplicate driven-coordinate poses reuse a cached equilibrium

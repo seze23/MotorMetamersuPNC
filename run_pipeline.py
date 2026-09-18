@@ -8,7 +8,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent
-SCRIPT_DIR = ROOT / "dataexp" / "centerout"
+SCRIPT_DIR = ROOT / "process"
 STAGES = [
     ("inverse-kinematics", "ikcenterout.py"),
     ("motion", "gencenterout.py"),

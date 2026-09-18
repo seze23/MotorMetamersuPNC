@@ -1,9 +1,14 @@
 """Generate configurable minimum-jerk center-out path artifacts."""
 
 import os
+import sys
+from pathlib import Path
 
 import numpy as np
 import opensim as osm
+
+# This file is also launched directly when selected in an experiment YAML.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from experiment import create_manifest, relative_artifact, validate_path_artifact
 from paths import EXPERIMENT_CONFIG, MODEL_PATH, PATHS_DIR
