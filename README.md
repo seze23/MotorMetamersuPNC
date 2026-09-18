@@ -115,6 +115,15 @@ drawn and named interactively. Drawn curves are traversed once and held at their
 endpoint by default. Set `path.return_to_rest: true` to retrace each curve back
 to the resting hand. The GUI's average-hand-speed field is measured in cm/s and
 is saved separately for each path; traversal duration is curve length / speed.
+The drawing workspace is a conservative ellipse fitted from a 24-direction IK
+sweep. It is shifted toward the torso because the resting hand is not at the
+center of the anatomical workspace. This boundary is intended for exploratory
+testing; controlled experiments should normally use a scripted path generator.
+
+Because the IK stage tracks only the hand marker, it also applies a very small
+rest-pose coordinate weight (`ik.coordinate_regularization_weight`) to select a
+stable solution among the many joint postures that can place the hand at the
+same point. Set the weight to `0` to recover unregularized one-marker IK.
 
 A generator may create any number of paths and choose their names at runtime.
 It must write one `.npz` per path beneath the experiment's `paths/` directory,

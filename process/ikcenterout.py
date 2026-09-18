@@ -24,7 +24,7 @@ import sys
 import pandas as pd
 
 from experiment import load_manifest, resolve_artifact, set_artifact, validate_path_artifact
-from paths import REPO_DIR, IK_DIR, MODEL_PATH
+from paths import EXPERIMENT_CONFIG, REPO_DIR, IK_DIR, MODEL_PATH
 
 sys.path.insert(0, REPO_DIR)
 
@@ -32,13 +32,15 @@ sys.path.insert(0, REPO_DIR)
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 W2S = S2W.T   # world frame -> OpenSim ground frame
 
-# Rest posture -- must match generate_centerout_xyz.py
-REST = {
-    'elv_angle':     20.0,
-    'shoulder_elv':  40.0,
-    'shoulder_rot':  25.0,
-    'elbow_flexion': 85.0,
-}
+# Rest posture and optional low-weight posture regularization come from the
+# experiment config. Regularization resolves the many joint configurations that
+# can otherwise place a single tracked hand marker at the same point.
+PATH_CONFIG = EXPERIMENT_CONFIG["path"]
+REST = PATH_CONFIG["rest_pose_degrees"]
+IK_CONFIG = EXPERIMENT_CONFIG.get("ik", {})
+COORDINATE_REGULARIZATION_WEIGHT = float(
+    IK_CONFIG.get("coordinate_regularization_weight", 0.001)
+)
 
 # All 7 MoBL-ARMS coordinates in order (for reading .mot output)
 COORD_NAMES = ["elv_angle", "shoulder_elv", "shoulder_rot",
@@ -159,6 +161,16 @@ for trajectory in trajectories:
     handle_task.setWeight(100.0)
     marker_task_set.cloneAndAppend(handle_task)
 
+    if COORDINATE_REGULARIZATION_WEIGHT > 0:
+        for coordinate_name, degrees in REST.items():
+            coordinate_task = osm.IKCoordinateTask()
+            coordinate_task.setName(coordinate_name)
+            coordinate_task.setApply(True)
+            coordinate_task.setWeight(COORDINATE_REGULARIZATION_WEIGHT)
+            coordinate_task.setValueType(osm.IKCoordinateTask.ManualValue)
+            coordinate_task.setValue(np.radians(degrees))
+            marker_task_set.cloneAndAppend(coordinate_task)
+
     print(f"  Running OpenSim IK...")
     ik_tool.run()
 
@@ -181,6 +193,18 @@ for trajectory in trajectories:
             if np.abs(vals).max() < 10:  # radians
                 vals = np.degrees(vals)
             joint_angles[:len(vals), j] = vals[:n_total]
+
+    # The iterative IK solver can drift by tiny amounts while solving repeated
+    # copies of an identical hand target. Use one deterministic joint solution
+    # for every exact repeated target so stationary holds stay stationary and
+    # downstream pose caching remains effective.
+    solution_by_target = {}
+    for frame_index, target in enumerate(xyz_world):
+        key = np.asarray(target, dtype=np.float32).tobytes()
+        if key in solution_by_target:
+            joint_angles[frame_index] = solution_by_target[key]
+        else:
+            solution_by_target[key] = joint_angles[frame_index].copy()
 
     # Sanity check
     print(f"  Joint angle ranges:")

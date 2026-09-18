@@ -80,4 +80,19 @@ def validate_path_artifact(path, constraints=None):
             f"{path}: maximum displacement {displacement.max():.2f} cm "
             f"exceeds configured limit {max_allowed:.2f} cm"
         )
+    ellipse = constraints.get("workspace_ellipse")
+    if ellipse:
+        center_xyz = np.asarray(data.get("center_xyz", xyz[0]), dtype=float)
+        shoulder_direction = -center_xyz[:2]
+        shoulder_direction /= max(np.linalg.norm(shoulder_direction), 1e-9)
+        display_rotation = np.vstack((
+            -shoulder_direction,
+            [shoulder_direction[1], -shoulder_direction[0]],
+        ))
+        display_displacement = (xyz[:, :2] - xyz[0, :2]) @ display_rotation.T
+        ellipse_center = np.asarray(ellipse.get("center_cm", [0.0, 0.0]), dtype=float)
+        ellipse_radii = np.asarray(ellipse["radii_cm"], dtype=float)
+        normalized = (display_displacement - ellipse_center) / ellipse_radii
+        if np.max(np.sum(normalized**2, axis=1)) > 1.0 + 1e-6:
+            raise ValueError(f"{path}: path leaves the configured IK workspace ellipse")
     return xyz, times

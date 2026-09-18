@@ -91,7 +91,16 @@ class PathDrawingApp:
         self.root = root
         self.config = config
         self.center_xyz = np.asarray(center_xyz, dtype=float)
-        self.max_cm = float(config["max_displacement_cm"])
+        ellipse = config.get("workspace_ellipse", {})
+        fallback_radius = float(config["max_displacement_cm"])
+        self.workspace_center = np.asarray(ellipse.get("center_cm", [0.0, 0.0]), dtype=float)
+        self.workspace_radii = np.asarray(
+            ellipse.get("radii_cm", [fallback_radius, fallback_radius]), dtype=float
+        )
+        if self.workspace_center.shape != (2,) or self.workspace_radii.shape != (2,):
+            raise ValueError("workspace_ellipse center_cm and radii_cm must each have 2 values")
+        if np.any(self.workspace_radii <= 0):
+            raise ValueError("workspace ellipse radii must be positive")
         shoulder_direction = -self.center_xyz[:2]
         shoulder_direction /= max(np.linalg.norm(shoulder_direction), 1e-9)
         perpendicular = np.array([shoulder_direction[1], -shoulder_direction[0]])
@@ -100,7 +109,7 @@ class PathDrawingApp:
         self.display_rotation = np.vstack((-shoulder_direction, perpendicular))
         self.canvas_width = self.CANVAS_SIZE
         self.canvas_height = self.CANVAS_SIZE
-        self.scale = (self.CANVAS_SIZE / 2 - self.PADDING) / self.max_cm
+        self.scale = (self.CANVAS_SIZE / 2 - self.PADDING) / self.workspace_radii.max()
         self.origin = np.array([self.CANVAS_SIZE / 2, self.CANVAS_SIZE / 2])
         self.current = []
         self.saved = {}
@@ -205,14 +214,10 @@ class PathDrawingApp:
         direction = shoulder / max(np.linalg.norm(shoulder), 1e-9)
         body_center = shoulder + direction * 6.0
         body_half_size = np.array([6.0, 12.0])
-        world_min = np.minimum(
-            np.array([-self.max_cm, -self.max_cm]),
-            body_center - body_half_size,
-        )
-        world_max = np.maximum(
-            np.array([self.max_cm, self.max_cm]),
-            body_center + body_half_size,
-        )
+        workspace_min = self.workspace_center - self.workspace_radii
+        workspace_max = self.workspace_center + self.workspace_radii
+        world_min = np.minimum(workspace_min, body_center - body_half_size)
+        world_max = np.maximum(workspace_max, body_center + body_half_size)
         extent = world_max - world_min
         self.scale = min(
             (width - 2 * self.PADDING) / extent[0],
@@ -227,21 +232,34 @@ class PathDrawingApp:
 
     def canvas_point(self, point_cm):
         display_point = self.display_rotation @ np.asarray(point_cm, dtype=float)
+        return self.canvas_display_point(display_point)
+
+    def canvas_display_point(self, display_point):
         return self.origin + np.array([display_point[0], -display_point[1]]) * self.scale
 
     def render_canvas(self):
         self.canvas.delete("all")
-        radius = self.max_cm * self.scale
         x, y = self.origin
-        self.canvas.create_oval(x-radius, y-radius, x+radius, y+radius,
-                                fill="#e0f2fe", outline="#0284c7", width=3)
-        inner_radius = radius / 2
+        ellipse_center = self.canvas_display_point(self.workspace_center)
+        radius_x, radius_y = self.workspace_radii * self.scale
         self.canvas.create_oval(
-            x-inner_radius, y-inner_radius, x+inner_radius, y+inner_radius,
+            ellipse_center[0] - radius_x, ellipse_center[1] - radius_y,
+            ellipse_center[0] + radius_x, ellipse_center[1] + radius_y,
+            fill="#e0f2fe", outline="#0284c7", width=3,
+        )
+        self.canvas.create_oval(
+            ellipse_center[0] - radius_x / 2, ellipse_center[1] - radius_y / 2,
+            ellipse_center[0] + radius_x / 2, ellipse_center[1] + radius_y / 2,
             outline="#7dd3fc", width=1, dash=(4, 4),
         )
-        self.canvas.create_line(x-radius, y, x+radius, y, fill="#bae6fd", width=1)
-        self.canvas.create_line(x, y-radius, x, y+radius, fill="#bae6fd", width=1)
+        self.canvas.create_line(
+            ellipse_center[0] - radius_x, ellipse_center[1],
+            ellipse_center[0] + radius_x, ellipse_center[1], fill="#bae6fd", width=1,
+        )
+        self.canvas.create_line(
+            ellipse_center[0], ellipse_center[1] - radius_y,
+            ellipse_center[0], ellipse_center[1] + radius_y, fill="#bae6fd", width=1,
+        )
         # World X/Y are the drawing plane. Body, shoulder, resting hand, and
         # the allowed local path region are all rendered at the same scale.
         shoulder_delta = -self.center_xyz[:2]
@@ -293,11 +311,27 @@ class PathDrawingApp:
 
     def event_point_cm(self, event, clamp=True):
         delta = np.array([event.x, event.y], dtype=float) - self.origin
-        norm = np.linalg.norm(delta)
-        limit = self.max_cm * self.scale
-        if clamp and norm > limit:
-            delta *= limit / norm
         display_point = np.array([delta[0] / self.scale, -delta[1] / self.scale])
+        normalized = (display_point - self.workspace_center) / self.workspace_radii
+        if clamp and np.dot(normalized, normalized) > 1.0:
+            # Intersect the ray from the resting hand with the shifted ellipse.
+            inverse_radii = 1.0 / self.workspace_radii
+            direction = display_point
+            a = np.dot(direction * inverse_radii, direction * inverse_radii)
+            b = -2.0 * np.dot(
+                direction * inverse_radii,
+                self.workspace_center * inverse_radii,
+            )
+            c = np.dot(
+                self.workspace_center * inverse_radii,
+                self.workspace_center * inverse_radii,
+            ) - 1.0
+            discriminant = max(0.0, b * b - 4.0 * a * c)
+            roots = [root for root in (
+                (-b - np.sqrt(discriminant)) / (2.0 * a),
+                (-b + np.sqrt(discriminant)) / (2.0 * a),
+            ) if root >= 0.0]
+            display_point *= min(roots) if roots else 0.0
         return self.display_rotation.T @ display_point
 
     def track_cursor(self, event):

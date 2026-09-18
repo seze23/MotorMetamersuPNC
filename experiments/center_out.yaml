@@ -7,6 +7,10 @@ visualization:
   # Display-only floor height; this does not alter the model or motion data.
   ground_height_m: -1.0
 
+ik:
+  # Keeps the underconstrained one-marker IK solution near the configured pose.
+  coordinate_regularization_weight: 0.001
+
 path:
   # Any Python generator can be selected here. Setting this to
   # process/generate_paths/draw.py opens a GUI for drawing and naming paths.

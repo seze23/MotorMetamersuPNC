@@ -7,13 +7,20 @@ visualization:
   # Display-only floor height; this does not alter the model or motion data.
   ground_height_m: -1.0
 
+ik:
+  # Keeps the underconstrained one-marker IK solution near the configured pose.
+  coordinate_regularization_weight: 0.001
+
 path:
   # draw.py opens a GUI. Draw, name, save, and submit paths to continue.
   generator: process/generate_paths/draw.py
   sample_rate_hz: 240
-  # Uniform working radius verified with smooth IK reaches in 12 directions.
-  # 20 cm was reliable; a 30 cm radius degraded near several joint limits.
-  max_displacement_cm: 20.0
+  # Conservative fit to a 24-direction IK sweep. In the rotated drawing view,
+  # this spans 40 cm toward the torso, 20 cm away, and about 40 cm sideways.
+  max_displacement_cm: 45.0
+  workspace_ellipse:
+    center_cm: [-10.0, 0.0]
+    radii_cm: [30.0, 40.0]
   # Initial average speed shown in draw.py. Each saved path remembers its own.
   path_speed_cm_s: 20.0
   # false plays the drawn curve once and holds at its endpoint. Set true to
