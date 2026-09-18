@@ -9,6 +9,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent
 SCRIPT_DIR = ROOT / "process"
+DISPLAY_SCRIPT = SCRIPT_DIR / "utils" / "display_sim.py"
 STAGES = [
     ("inverse-kinematics", "ikcenterout.py"),
     ("motion", "gencenterout.py"),
@@ -59,5 +60,13 @@ for name, script in all_stages:
         env=child_env,
         check=True,
     )
+    if name == "motion" and config.get("display_simulation", False):
+        print("\n=== motion-review: OpenSim visualizer ===", flush=True)
+        subprocess.run(
+            [sys.executable, str(DISPLAY_SCRIPT)],
+            cwd=ROOT,
+            env=child_env,
+            check=True,
+        )
     if name == args.through:
         break

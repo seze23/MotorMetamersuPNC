@@ -36,6 +36,16 @@ Use `--through muscle-signals` when the trained checkpoint is not available:
 python run_pipeline.py --config experiments/center_out.yaml --through muscle-signals
 ```
 
+Set `display_simulation: true` in an experiment YAML to pause after motion-file
+generation and open the OpenSim model viewer. The accompanying control window
+stays above the 3-D window and lets you select a generated path from the dropdown
+or with Previous/Next, replay it, or continue the pipeline. The 3-D clock shows
+elapsed time while the control window shows elapsed / total time. Playback speed,
+preview frame rate, and the display-only floor height are configured under
+`visualization`. The model's
+referenced display meshes are stored beside the `.osim` file under `Geometry/`;
+they affect visualization only.
+
 All generated files are isolated beneath the named experiment directory:
 
 ```text
@@ -64,10 +74,6 @@ python run_pipeline.py --config experiments/my_paths.yaml --through muscle-signa
 Names may contain letters, numbers, underscores, and hyphens, and must begin
 with a letter or number. Scripts run directly use `center_out` by default; set
 the `MOTOR_META_EXPERIMENT` environment variable to select another directory.
-
-The display meshes were intentionally omitted. OpenSim therefore prints
-`Couldn't find file '*.vtp'` warnings while loading the model; these affect GUI
-appearance only, not IK, muscle equilibrium, or spindle calculations.
 
 ## Stages
 
@@ -105,7 +111,10 @@ The generator is selected by `path.generator` in the experiment YAML. The
 built-in `generatereachpath.py` reads all trajectory parameters from that YAML,
 including sample rate, reach size, rest pose, and phase durations. Setting the
 generator to `process/generate_paths/draw.py` will open a GUI in which paths can be
-drawn and named interactively (when that optional generator is installed).
+drawn and named interactively. Drawn curves are traversed once and held at their
+endpoint by default. Set `path.return_to_rest: true` to retrace each curve back
+to the resting hand. The GUI's average-hand-speed field is measured in cm/s and
+is saved separately for each path; traversal duration is curve length / speed.
 
 A generator may create any number of paths and choose their names at runtime.
 It must write one `.npz` per path beneath the experiment's `paths/` directory,

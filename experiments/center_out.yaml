@@ -1,4 +1,11 @@
 experiment: center_out
+display_simulation: false
+
+visualization:
+  playback_speed: 1.0
+  max_fps: 60
+  # Display-only floor height; this does not alter the model or motion data.
+  ground_height_m: -1.0
 
 path:
   # Any Python generator can be selected here. Setting this to

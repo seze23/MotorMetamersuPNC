@@ -1,0 +1,32 @@
+experiment: drawn_paths
+display_simulation: true
+
+visualization:
+  playback_speed: 1.0
+  max_fps: 60
+  # Display-only floor height; this does not alter the model or motion data.
+  ground_height_m: -1.0
+
+path:
+  # draw.py opens a GUI. Draw, name, save, and submit paths to continue.
+  generator: process/generate_paths/draw.py
+  sample_rate_hz: 240
+  # Uniform working radius verified with smooth IK reaches in 12 directions.
+  # 20 cm was reliable; a 30 cm radius degraded near several joint limits.
+  max_displacement_cm: 20.0
+  # Initial average speed shown in draw.py. Each saved path remembers its own.
+  path_speed_cm_s: 20.0
+  # false plays the drawn curve once and holds at its endpoint. Set true to
+  # retrace the curve back to the resting hand after reaching the endpoint.
+  return_to_rest: false
+  rest_pose_degrees:
+    elv_angle: 20.0
+    shoulder_elv: 40.0
+    shoulder_rot: 25.0
+    elbow_flexion: 85.0
+  timing_seconds:
+    hold_before: 1.65
+    reach: 0.50
+    hold_target: 0.50
+    return: 0.50
+    hold_after: 1.65
