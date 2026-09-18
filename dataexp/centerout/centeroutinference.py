@@ -24,8 +24,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 
-REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
+from paths import REPO_DIR, CENTEROUT_DIR
 sys.path.insert(0, REPO_DIR)
 
 from utils.visualize_sample import get_shoulder_elbow_wrist_loc
@@ -96,15 +95,14 @@ for sp_path in spindle_files:
     chunk_data   = sp_data['firing_rates'].astype(np.float32)  # (1,10,25,1152)
     joint_angles = sp_data['joint_angles']                     # (1152,7) degrees
 
-    # Build labels via FK
-    # get_shoulder_elbow_wrist_loc indexes columns 3,4,5,6
-    labels_for_fk = np.zeros((TIME_STEPS, 7), dtype=np.float32)
-    labels_for_fk[:, 3] = joint_angles[:, 0]  # elv_angle
-    labels_for_fk[:, 4] = joint_angles[:, 1]  # shoulder_elv
-    labels_for_fk[:, 5] = joint_angles[:, 2]  # shoulder_rot
-    labels_for_fk[:, 6] = joint_angles[:, 3]  # elbow_flexion
-
-    _, _, wrist_loc = get_shoulder_elbow_wrist_loc(labels_for_fk)  # (1152,3) cm
+    # Prefer marker positions extracted from the selected OpenSim model.
+    # The analytic fallback supports older spindle files.
+    if 'wrist_xyz_world' in sp_data:
+        wrist_loc = sp_data['wrist_xyz_world']
+    else:
+        labels_for_fk = np.zeros((TIME_STEPS, 7), dtype=np.float32)
+        labels_for_fk[:, 3:7] = joint_angles[:, :4]
+        _, _, wrist_loc = get_shoulder_elbow_wrist_loc(labels_for_fk)
 
     labels = np.zeros((1, TIME_STEPS, 7), dtype=np.float32)
     labels[0, :, 0:3] = wrist_loc

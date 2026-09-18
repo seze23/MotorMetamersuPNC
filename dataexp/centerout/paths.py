@@ -7,9 +7,10 @@ centeroutinference.py run unmodified in both environments.
 """
 
 import os
+from pathlib import Path
 
-REPO_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp", "centerout")
+REPO_DIR = str(Path(__file__).resolve().parents[2])
+CENTEROUT_DIR = os.path.join(REPO_DIR, "outputs")
 
 MODEL_PATH = os.path.join(
     REPO_DIR,

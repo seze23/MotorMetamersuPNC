@@ -11,7 +11,7 @@ import numpy as np
 import os
 import glob
 
-CENTEROUT_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions/dataexp/centerout"
+from paths import CENTEROUT_DIR
 
 SAMPLE_RATE = 240
 N_TOTAL     = 1152
@@ -73,4 +73,4 @@ for ik_path in ik_files:
         print(v)
 
 print()
-print("Done. Run extractdata_centerout.py -> computefrcenterout.py -> centeroutinference.py")
+print("Done. Run extractcenterout.py -> computefrcenterout.py -> centeroutinference.py")

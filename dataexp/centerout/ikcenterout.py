@@ -25,11 +25,7 @@ import sys
 import pandas as pd
 import tempfile
 
-REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
-MODEL_PATH    = os.path.join(REPO_DIR,
-    "MoBL-ARMSDynamicUpperLimb-latest/MoBL-ARMS Upper Extremity Model"
-    "/Model/4.1/DefaultMOBL_ARMS_fixed_41.osim")
+from paths import REPO_DIR, CENTEROUT_DIR, MODEL_PATH
 
 sys.path.insert(0, REPO_DIR)
 
@@ -225,4 +221,4 @@ for xyz_path in xyz_files:
     print(f"  Saved {os.path.basename(out_npz)}")
     print()
 
-print("All done. Next: run generate_mot_centerout.py")
+print("All done. Next: run gencenterout.py")

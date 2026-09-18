@@ -1,10 +1,15 @@
 *.hdf5
 *.ckpt
-trained_models/
+trained_models/*
+!trained_models/.gitkeep
+outputs/*
+!outputs/.gitkeep
 data/cleaned_smooth/
 data/spindles/
+data/**/sampled_coefficients_*.csv
 data.zip
 trained_models.zip
 __pycache__/
 *.pyc
+opensim.log
 .ipynb_checkpoints/

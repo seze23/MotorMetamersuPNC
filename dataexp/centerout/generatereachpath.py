@@ -24,13 +24,11 @@ Output: dataexp/centerout/desired_xyz_<name>.npz
 import numpy as np
 import os
 import sys
+import opensim as osm
 
-REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
-os.makedirs(CENTEROUT_DIR, exist_ok=True)
+from paths import REPO_DIR, CENTEROUT_DIR
 
-sys.path.insert(0, REPO_DIR)
-from utils.visualize_sample import get_shoulder_elbow_wrist_loc
+from paths import MODEL_PATH
 
 SAMPLE_RATE = 240
 N_TOTAL     = 1152
@@ -52,14 +50,22 @@ times = np.linspace(0, DURATION, N_TOTAL)
 REST = dict(elv_angle=20.0, shoulder_elv=40.0, shoulder_rot=25.0,
             elbow_flexion=85.0)
 
-labels_rest = np.zeros((1, 7), dtype=np.float32)
-labels_rest[0, 3] = REST['elv_angle']
-labels_rest[0, 4] = REST['shoulder_elv']
-labels_rest[0, 5] = REST['shoulder_rot']
-labels_rest[0, 6] = REST['elbow_flexion']
+# Derive the center from the same OpenSim model used by IK. This avoids a
+# second, approximate FK implementation drifting away from the actual model.
+S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
+model = osm.Model(MODEL_PATH)
+state = model.initSystem()
+coordinates = model.getCoordinateSet()
+for name, value in REST.items():
+    coordinates.get(name).setValue(state, np.radians(value))
+model.realizePosition(state)
 
-_, _, wrist_rest = get_shoulder_elbow_wrist_loc(labels_rest)
-wrist_rest = wrist_rest[0]  # (3,) X, Y, Z in cm, lab world frame
+markers = model.getMarkerSet()
+shoulder = markers.get('R.Shoulder').getLocationInGround(state)
+handle = markers.get('Handle').getLocationInGround(state)
+shoulder = np.array([shoulder.get(i) for i in range(3)])
+handle = np.array([handle.get(i) for i in range(3)])
+wrist_rest = S2W @ (handle - shoulder) * 100.0
 
 CENTER_XYZ = wrist_rest.copy()
 CENTER_XY  = wrist_rest[:2]   # horizontal plane: X=lateral, Y=anterior

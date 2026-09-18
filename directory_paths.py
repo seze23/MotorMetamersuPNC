@@ -1,7 +1,5 @@
-# path where the data is stored
-PARENT_DIR = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
+from pathlib import Path
 
-# path where the data is stored to save the results if different
+PARENT_DIR = str(Path(__file__).resolve().parent)
 SAVE_DIR = PARENT_DIR
-
-MODELS_DIR = "trained_models"
+MODELS_DIR = str(Path(PARENT_DIR) / "trained_models")

@@ -1,0 +1,16 @@
+name: motor-meta-simplified
+channels:
+  - opensim-org
+  - pytorch
+  - conda-forge
+dependencies:
+  - python=3.10
+  - opensim=4.4
+  - numpy
+  - pandas
+  - scipy
+  - matplotlib
+  - pyyaml
+  - h5py
+  - tqdm
+  - pytorch

@@ -20,8 +20,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
-REPO_DIR      = "/home/sydneyez/sydneyez/ProprioceptiveIllusions"
-CENTEROUT_DIR = os.path.join(REPO_DIR, "dataexp/centerout")
+from paths import REPO_DIR, CENTEROUT_DIR
 CONFIG_PATH   = os.path.join(REPO_DIR, "extract_data/configs/train_test_data_spindles_extended.yaml")
 
 sys.path.insert(0, REPO_DIR)
