@@ -24,19 +24,42 @@ trained_models/
 
 ## Run
 
-Run everything:
+Run the default `center_out` experiment:
 
 ```powershell
-python run_pipeline.py
+python run_pipeline.py --experiment center_out
 ```
 
 Use `--through muscle-signals` when the trained checkpoint is not available:
 
 ```powershell
-python run_pipeline.py --through muscle-signals
+python run_pipeline.py --experiment center_out --through muscle-signals
 ```
 
-All generated files are written to `outputs/`.
+All generated files are isolated beneath the named experiment directory:
+
+```text
+outputs/
+  center_out/
+    desired_xyz_*.npz
+    ik_*.npz
+    center_out_*.mot
+    center_out_*.npz
+    center_out_*_spindles.npz
+  new_experiment_name/
+    ...
+```
+
+For a new path experiment, change the trajectory definition and choose a new
+name so existing results are not overwritten:
+
+```powershell
+python run_pipeline.py --experiment new_experiment_name --through muscle-signals
+```
+
+Names may contain letters, numbers, underscores, and hyphens, and must begin
+with a letter or number. Scripts run directly use `center_out` by default; set
+the `MOTOR_META_EXPERIMENT` environment variable to select another directory.
 
 The display meshes were intentionally omitted. OpenSim therefore prints
 `Couldn't find file '*.vtp'` warnings while loading the model; these affect GUI
