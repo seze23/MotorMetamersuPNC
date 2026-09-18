@@ -201,7 +201,7 @@ Review the extraction YAML before running this. Its default output has 5 Ia and
 ordered as wrist XYZ followed by four joint angles.
 
 ```powershell
-python -m extract_data.generate_train_test_data `
+python extract_data/generate_train_test_data.py `
   --config_path extract_data/configs/train_test_data_spindles_extended.yaml `
   --input_file C:/path/to/raw_training_data.hdf5 `
   --output_dir C:/path/to/processed_data `

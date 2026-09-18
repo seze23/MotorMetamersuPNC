@@ -21,7 +21,11 @@ import opensim as osm
 import numpy as np
 import os
 import sys
+import threading
+import time
 import pandas as pd
+import yaml
+from tqdm.auto import tqdm
 
 from experiment import load_manifest, resolve_artifact, set_artifact, validate_path_artifact
 from paths import EXPERIMENT_CONFIG, REPO_DIR, IK_DIR, MODEL_PATH
@@ -31,6 +35,80 @@ sys.path.insert(0, REPO_DIR)
 # shoulder_to_world from lab code
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 W2S = S2W.T   # world frame -> OpenSim ground frame
+
+# OpenSim's InverseKinematicsTool does not expose per-frame callbacks. This
+# history supplies an explicitly loose, time-based progress estimate instead.
+IK_TIMING_PATH = os.path.join(REPO_DIR, "outputs", ".ik_timing.yaml")
+DEFAULT_SECONDS_PER_FRAME = 0.04
+
+
+def load_seconds_per_frame():
+    try:
+        with open(IK_TIMING_PATH, encoding="utf-8") as timing_file:
+            samples = yaml.safe_load(timing_file).get("seconds_per_frame", [])
+        samples = [float(value) for value in samples if float(value) > 0]
+        if samples:
+            return float(np.median(samples[-10:])), len(samples)
+    except (FileNotFoundError, AttributeError, TypeError, ValueError, yaml.YAMLError):
+        pass
+    return DEFAULT_SECONDS_PER_FRAME, 0
+
+
+def save_seconds_per_frame(value):
+    samples = []
+    try:
+        with open(IK_TIMING_PATH, encoding="utf-8") as timing_file:
+            samples = yaml.safe_load(timing_file).get("seconds_per_frame", [])
+    except (FileNotFoundError, AttributeError, yaml.YAMLError):
+        pass
+    samples = [float(item) for item in samples[-9:] if float(item) > 0]
+    samples.append(float(value))
+    os.makedirs(os.path.dirname(IK_TIMING_PATH), exist_ok=True)
+    with open(IK_TIMING_PATH, "w", encoding="utf-8") as timing_file:
+        yaml.safe_dump({"seconds_per_frame": samples}, timing_file)
+
+
+class LooseIKProgress:
+    """Time-based progress display; it does not represent completed IK frames."""
+
+    def __init__(self, frames, trajectory_name):
+        self.frames = frames
+        seconds_per_frame, sample_count = load_seconds_per_frame()
+        self.estimated_seconds = max(1.0, frames * seconds_per_frame)
+        source = f"{sample_count} prior run(s)" if sample_count else "default rate"
+        self.description = f"Loose estimate: {trajectory_name} ({source})"
+        self.started = None
+        self.finished = threading.Event()
+        self.thread = None
+        self.bar = None
+
+    def __enter__(self):
+        self.started = time.perf_counter()
+        self.bar = tqdm(total=self.frames, desc=self.description, unit="frame")
+        self.thread = threading.Thread(target=self._update, daemon=True)
+        self.thread.start()
+        return self
+
+    def _update(self):
+        while not self.finished.wait(0.5):
+            elapsed = time.perf_counter() - self.started
+            # Stop at 99% if OpenSim exceeds the estimate; the final update only
+            # happens when ik_tool.run() really returns.
+            estimated = min(self.frames - 1, int(
+                self.frames * elapsed / self.estimated_seconds
+            ))
+            if estimated > self.bar.n:
+                self.bar.update(estimated - self.bar.n)
+                self.bar.set_postfix_str("time-based, not solved frames", refresh=False)
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.finished.set()
+        self.thread.join()
+        if exc_type is None:
+            self.bar.update(self.frames - self.bar.n)
+        self.bar.close()
+        self.elapsed = time.perf_counter() - self.started
+        return False
 
 # Rest posture and optional low-weight posture regularization come from the
 # experiment config. Regularization resolves the many joint configurations that
@@ -171,8 +249,22 @@ for trajectory in trajectories:
             coordinate_task.setValue(np.radians(degrees))
             marker_task_set.cloneAndAppend(coordinate_task)
 
-    print(f"  Running OpenSim IK...")
-    ik_tool.run()
+    seconds_per_frame, sample_count = load_seconds_per_frame()
+    print(
+        "  Running OpenSim IK... "
+        f"Loose estimate: {n_total * seconds_per_frame / 60:.1f} min "
+        f"({sample_count} prior run(s) used)"
+        if sample_count else
+        "  Running OpenSim IK... Loose estimate: "
+        f"{n_total * seconds_per_frame / 60:.1f} min (bootstrap default; no history yet)"
+    )
+    with LooseIKProgress(n_total, name) as progress:
+        ik_tool.run()
+    save_seconds_per_frame(progress.elapsed / n_total)
+    print(
+        f"  Actual IK time: {progress.elapsed / 60:.1f} min; "
+        "saved to improve the next loose estimate."
+    )
 
     # Read result
     if not os.path.exists(mot_path):
