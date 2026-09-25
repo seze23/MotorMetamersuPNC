@@ -23,6 +23,7 @@ from experiment import load_manifest, resolve_artifact, set_artifact
 from paths import REPO_DIR, SPINDLES_DIR, FIGURES_DIR, EXPERIMENT_CONFIG
 
 PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
+SPINDLE_OPTIONS = EXPERIMENT_CONFIG.get("spindles", {})
 MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
 COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
 if MODEL_FAMILY not in {"main", "extended"}:
@@ -59,8 +60,17 @@ if MODEL_FAMILY == "main":
         raise ValueError("The main pretrained model uses coefficient seed 0")
     config["i_a_coeff_path"] = "data/spindle_coefficients/i_a/linear/coefficients.csv"
     config["ii_coeff_path"] = "data/spindle_coefficients/ii/linear/coefficients.csv"
+for key in (
+    "i_a_coeff_path", "ii_coeff_path",
+    "i_a_sampled_coeff_path", "ii_sampled_coeff_path",
+):
+    if SPINDLE_OPTIONS.get(key) is not None:
+        config[key] = SPINDLE_OPTIONS[key]
 config["i_a_coeff_path"] = os.path.join(REPO_DIR, config["i_a_coeff_path"])
 config["ii_coeff_path"]  = os.path.join(REPO_DIR, config["ii_coeff_path"])
+for key in ("i_a_sampled_coeff_path", "ii_sampled_coeff_path"):
+    if config[key] is not None and not os.path.isabs(config[key]):
+        config[key] = os.path.join(REPO_DIR, config[key])
 
 muscles          = config["muscles"]
 num_coefficients = [config["num_i_a"], config["num_ii"]]
@@ -96,7 +106,12 @@ for direction, npz_path in npz_files:
     fiber_lengths = d['fiber_lengths']    # (1152, 25) mm
     joint_angles  = d['joint_angles']     # (1152, 7) degrees
     times         = d['times']
-    dt = float(np.median(np.diff(times)))
+    fixed_sample_rate = SPINDLE_OPTIONS.get("fixed_sample_rate_hz")
+    dt = (
+        1.0 / float(fixed_sample_rate)
+        if fixed_sample_rate is not None
+        else float(np.median(np.diff(times)))
+    )
     sample_rate = 1.0 / dt
     # Pass through wrist/elbow world positions for inference script
     wrist_xyz_world = d['wrist_xyz_world'] if 'wrist_xyz_world' in d else None

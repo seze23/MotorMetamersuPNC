@@ -9,9 +9,11 @@ import opensim as osm
 
 # This file is also launched directly when selected in an experiment YAML.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from experiment import create_manifest, relative_artifact, validate_path_artifact
 from paths import EXPERIMENT_CONFIG, MODEL_PATH, PATHS_DIR
+from utils.visualize_sample import get_shoulder_elbow_wrist_loc
 
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 DIRECTIONS = {
@@ -44,6 +46,17 @@ def model_rest_center(rest_pose):
     return S2W @ (handle - shoulder) * 100.0
 
 
+def legacy_training_rest_center(rest_pose):
+    """Reproduce the analytic FK convention used by the original pipeline."""
+    labels = np.zeros((1, 7), dtype=np.float32)
+    labels[0, 3:7] = [
+        rest_pose[name] for name in
+        ("elv_angle", "shoulder_elv", "shoulder_rot", "elbow_flexion")
+    ]
+    _, _, wrist = get_shoulder_elbow_wrist_loc(labels)
+    return wrist[0]
+
+
 def generate():
     config = EXPERIMENT_CONFIG["path"]
     sample_rate = float(config["sample_rate_hz"])
@@ -54,13 +67,28 @@ def generate():
     counts = {name: max(1, round(float(timing[name]) * sample_rate))
               for name in segment_names}
     n_total = sum(counts.values())
-    times = np.arange(n_total, dtype=np.float64) / sample_rate
-    center = model_rest_center(rest_pose)
+    if config.get("legacy_inclusive_timebase", False):
+        times = np.linspace(0.0, n_total / sample_rate, n_total)
+    else:
+        times = np.arange(n_total, dtype=np.float64) / sample_rate
+    center_source = str(config.get("center_source", "opensim_marker")).lower()
+    if center_source == "opensim_marker":
+        center = model_rest_center(rest_pose)
+    elif center_source == "legacy_training_fk":
+        center = legacy_training_rest_center(rest_pose)
+    else:
+        raise ValueError(
+            "path.center_source must be 'opensim_marker' or 'legacy_training_fk'"
+        )
     reach_profile = minimum_jerk(counts["reach"])
     return_profile = minimum_jerk(counts["return"])
     trajectories = []
 
-    for degrees, trajectory_id in DIRECTIONS.items():
+    selected_directions = config.get("directions_degrees")
+    directions = DIRECTIONS if selected_directions is None else {
+        int(degrees): DIRECTIONS[int(degrees)] for degrees in selected_directions
+    }
+    for degrees, trajectory_id in directions.items():
         angle = np.radians(degrees)
         target = center + reach_cm * np.array([np.cos(angle), np.sin(angle), 0.0])
         xyz = np.empty((n_total, 3), dtype=np.float32)

@@ -21,7 +21,7 @@ import yaml
 CUR_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
-class _TemporalPadConv2d(nn.Module):
+class _TemporalPadConv2d(nn.Conv2d):
     """Conv2d whose time-axis (last dim, W) padding uses `padding_mode`
     (e.g. 'reflect', 'replicate'), while the muscle-axis (H) padding always
     stays zero -- reflecting/replicating across the muscle-channel axis has
@@ -29,34 +29,32 @@ class _TemporalPadConv2d(nn.Module):
     so only the temporal boundary-artifact hypothesis is being tested here,
     not a second confound on the spatial axis.
 
-    IMPORTANT: only used for padding_mode != "zeros". For "zeros", the
-    caller constructs a plain nn.Conv2d directly instead of this wrapper --
-    wrapping it here would nest the Conv2d one level deeper as `self.conv`,
-    changing state_dict key names (e.g. "model.0.0.weight" ->
-    "model.0.0.conv.weight") and breaking `load_state_dict` for the existing
-    immutable checkpoint. Confirmed by testing: the original checkpoint
-    failed to load with this wrapper unconditionally applied.
+    Subclassing Conv2d keeps ``weight`` and ``bias`` at exactly the same state
+    dict keys as the original checkpoint while changing only boundary padding.
     """
 
     def __init__(self, in_channels, out_channels, kernel_size, stride,
                  muscle_pad, time_pad, padding_mode):
-        super().__init__()
+        super().__init__(
+            in_channels, out_channels, kernel_size=kernel_size,
+            stride=stride, padding=(muscle_pad, 0),
+        )
         assert padding_mode != "zeros", (
             "Use a plain nn.Conv2d for padding_mode='zeros' to preserve "
             "state_dict key compatibility with existing checkpoints."
         )
-        self.padding_mode = padding_mode
+        # Do not overwrite Conv2d.padding_mode: its inherited spatial padding
+        # must remain zeros. Only the manually applied time padding is changed.
+        self.temporal_padding_mode = padding_mode
         self.time_pad = time_pad
-        # Time axis padded manually in forward(); Conv2d only zero-pads
-        # the muscle axis (padding=(muscle_pad, 0)).
-        self.conv = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size,
-            stride=stride, padding=(muscle_pad, 0),
-        )
+        # Time is padded manually; the inherited Conv2d zero-pads muscles only.
 
     def forward(self, x):
-        x = F.pad(x, (self.time_pad, self.time_pad, 0, 0), mode=self.padding_mode)
-        return self.conv(x)
+        x = F.pad(
+            x, (self.time_pad, self.time_pad, 0, 0),
+            mode=self.temporal_padding_mode,
+        )
+        return super().forward(x)
 
 
 class SpatiotemporalNetwork(nn.Module):
@@ -409,7 +407,11 @@ class SpatiotemporalNetworkCausal(SpatiotemporalNetwork):
             or self.task == "letter_reconstruction_joints_vel"
         ):
             score = score.permute(0, 3, 1, 2)  # [B, Time, Channels, Muscles]
-            score = score.reshape(batch_size, self.outtime, -1)  # Flatten spatial dims
+            # Causal convolutions and the per-timestep linear layer support
+            # variable-duration trajectories. ``outtime`` records the 1152
+            # samples used for training, but inference may contain more or
+            # fewer samples (for example, paths drawn in the notebook).
+            score = score.reshape(batch_size, score.shape[1], -1)
 
         # Apply dropout if defined
         if self.dropout is not None:

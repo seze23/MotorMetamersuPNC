@@ -1,0 +1,42 @@
+experiment: regression_old_ik
+display_simulation: false
+
+ik:
+  backend: opensim
+  lock_wrist: false
+  coordinate_regularization_weight: 0.0
+
+muscle_lengths:
+  # The original successful pipeline stored all seven joint coordinates but
+  # drove only these four when evaluating OpenSim muscle fiber lengths.
+  drive_distal_coordinates: false
+
+spindles:
+  fixed_sample_rate_hz: 240
+
+proprioception:
+  model_family: extended
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  coefficient_seed: 0
+  training_seed: 9
+
+path:
+  generator: process/generate_paths/generatereachpath.py
+  center_source: legacy_training_fk
+  legacy_inclusive_timebase: true
+  legacy_trc_header_rate: true
+  directions_degrees: [0]
+  sample_rate_hz: 240
+  reach_cm: 10.0
+  max_displacement_cm: 15.0
+  rest_pose_degrees:
+    elv_angle: 20.0
+    shoulder_elv: 40.0
+    shoulder_rot: 25.0
+    elbow_flexion: 85.0
+  timing_seconds:
+    hold_before: 1.65
+    reach: 0.50
+    hold_target: 0.50
+    return: 0.50
+    hold_after: 1.65

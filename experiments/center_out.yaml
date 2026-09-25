@@ -24,7 +24,13 @@ ik:
     python: /home/braydenk/.venvs/motor-meta-nimble/bin/python
     iterations: 12
     damping: 0.00001
-    posture_weight: 0.00001
+    # Optimize unconstrained latent variables mapped smoothly inside the
+    # OpenSim coordinate ranges; never clip a completed joint update.
+    joint_limit_margin_degrees: 0.5
+    max_latent_step: 1.0
+    # Resolve redundant arm postures toward rest without sacrificing the
+    # higher-priority Handle tracking task.
+    nullspace_gain: 0.005
 
 proprioception:
   # "extended" selects one of the 20 robustness models. Use "main" only to
@@ -38,6 +44,14 @@ proprioception:
   # uses the same coefficient seed.
   coefficient_seed: 0
   training_seed: 9
+  # The checkpoint was trained with "zeros". "replicate" extends the first
+  # and last spindle samples to test reduced sequence-edge artifacts.
+  temporal_padding_mode: replicate
+
+muscle_lengths:
+  # Match the training-data generator: the published network's 25 muscle
+  # signals were generated from these four shoulder/elbow coordinates.
+  drive_distal_coordinates: false
 
 path:
   # Any Python generator can be selected here. Setting this to

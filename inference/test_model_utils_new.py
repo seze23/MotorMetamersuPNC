@@ -939,6 +939,7 @@ def load_model(
             training_seed=config.get(
                 "training_seed", 9
             ),  # default train seed is 9 for mdoel path
+            padding_mode=config.get("padding_mode", "zeros"),
         )
     # The archived Zenodo directory names are shorter than the path synthesized
     # by the original model class. The caller's path is the authoritative

@@ -168,7 +168,10 @@ def write_trc(filepath, times, handle_xyz_osim):
     handle_xyz_osim: (N, 3) in OpenSim ground frame, meters
     """
     n = len(times)
-    sample_rate = 1.0 / np.median(np.diff(times))
+    if EXPERIMENT_CONFIG.get("path", {}).get("legacy_trc_header_rate", False):
+        sample_rate = float(EXPERIMENT_CONFIG["path"]["sample_rate_hz"])
+    else:
+        sample_rate = 1.0 / np.median(np.diff(times))
     with open(filepath, 'w') as f:
         # TRC header
         f.write("PathFileType\t4\t(X/Y/Z)\t" + filepath + "\n")

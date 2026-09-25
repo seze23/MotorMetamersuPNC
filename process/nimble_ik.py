@@ -151,7 +151,7 @@ def _coupling_slopes(source=MODEL_PATH) -> dict[str, tuple[str, float]]:
 
 
 class NimbleArmIK(nn.Module):
-    """Differentiable Handle FK and fixed-step damped Gauss-Newton IK.
+    """Differentiable Handle FK and fixed-step bounded Gauss-Newton IK.
 
     Inputs and outputs use the project's conventions: shoulder-centered lab
     coordinates in centimetres and four joint angles in degrees. Because
@@ -160,7 +160,11 @@ class NimbleArmIK(nn.Module):
     and intentionally treated as constant within that iteration.
     """
 
-    def __init__(self, iterations=12, damping=1e-5, posture_weight=1e-5):
+    def __init__(
+        self, iterations=12, damping=1e-5,
+        joint_limit_margin_degrees=0.5, max_latent_step=1.0,
+        nullspace_gain=0.1,
+    ):
         super().__init__()
         if not EXPERIMENT_CONFIG.get("ik", {}).get("lock_wrist", True):
             raise ValueError(
@@ -184,12 +188,34 @@ class NimbleArmIK(nn.Module):
         }
         self.iterations = int(iterations)
         self.damping = float(damping)
-        self.posture_weight = float(posture_weight)
+        self.nullspace_gain = float(nullspace_gain)
+        self.joint_limit_margin_degrees = float(joint_limit_margin_degrees)
+        self.max_latent_step = float(max_latent_step)
 
         rest_cfg = EXPERIMENT_CONFIG["path"]["rest_pose_degrees"]
         rest = torch.tensor([rest_cfg[name] for name in DRIVEN_COORDINATES], dtype=DTYPE)
         self.register_buffer("rest_degrees", rest)
         self.register_buffer("rest_radians", torch.deg2rad(rest))
+        # Coordinate ranges from DefaultMOBL_ARMS_fixed_41.osim. The custom
+        # Gauss-Newton update must enforce these explicitly; unlike OpenSim's
+        # IK solver, an unconstrained update can cross muscle-wrap branches.
+        limits_degrees = {
+            "elv_angle": (-95.0, 130.0),
+            "shoulder_elv": (0.0, 180.0),
+            "shoulder_rot": (-90.0, 120.0),
+            "elbow_flexion": (0.0, 130.0),
+        }
+        lower = torch.tensor(
+            [limits_degrees[name][0] for name in DRIVEN_COORDINATES], dtype=DTYPE
+        )
+        upper = torch.tensor(
+            [limits_degrees[name][1] for name in DRIVEN_COORDINATES], dtype=DTYPE
+        )
+        self.register_buffer("lower_radians", torch.deg2rad(lower))
+        self.register_buffer("upper_radians", torch.deg2rad(upper))
+        margin = torch.deg2rad(torch.full_like(lower, self.joint_limit_margin_degrees))
+        self.register_buffer("bounded_lower_radians", self.lower_radians + margin)
+        self.register_buffer("bounded_upper_radians", self.upper_radians - margin)
         self.register_buffer("w2s", torch.as_tensor(S2W.T, dtype=DTYPE))
 
         # R.Shoulder is fixed to the torso in this model. Evaluate it at the
@@ -227,10 +253,29 @@ class NimbleArmIK(nn.Module):
         osim_position = nimble.map_to_pos(self.world, self.mapping, state)
         return (self.w2s.T @ (osim_position - self.shoulder_osim)) * 100.0
 
+    def _q_from_latent(self, latent: torch.Tensor) -> torch.Tensor:
+        """Map unconstrained variables smoothly into the valid joint ranges."""
+        span = self.bounded_upper_radians - self.bounded_lower_radians
+        return self.bounded_lower_radians + span * torch.sigmoid(latent)
+
+    def _latent_from_q(self, q_radians: torch.Tensor) -> torch.Tensor:
+        """Inverse of :meth:`_q_from_latent` for a valid initialization."""
+        span = self.bounded_upper_radians - self.bounded_lower_radians
+        unit = (q_radians - self.bounded_lower_radians) / span
+        eps = torch.finfo(unit.dtype).eps ** 0.5
+        unit = torch.clamp(unit, eps, 1.0 - eps)
+        return torch.logit(unit)
+
     def _solve_one(self, target_cm: torch.Tensor, initial_degrees: torch.Tensor) -> torch.Tensor:
         target_osim = self._target_osim(target_cm)
-        q = torch.deg2rad(initial_degrees.to(dtype=DTYPE))
+        # The previous solution initializes the local solve, preserving branch
+        # continuity. The fixed rest pose is the weak coordinate goal, matching
+        # OpenSim's IKCoordinateTasks and preventing cumulative null-space drift.
+        initial = torch.deg2rad(initial_degrees.to(dtype=DTYPE))
+        reference = self.rest_radians
+        latent = self._latent_from_q(initial)
         for _ in range(self.iterations):
+            q = self._q_from_latent(latent)
             full = self._full_positions(q)
             state = torch.cat((full, torch.zeros_like(full)))
             predicted = nimble.map_to_pos(self.world, self.mapping, state)
@@ -243,15 +288,32 @@ class NimbleArmIK(nn.Module):
             coupling_jacobian = torch.autograd.functional.jacobian(
                 self._full_positions, q, create_graph=False
             ).detach()
-            jacobian = full_jacobian @ coupling_jacobian
+            jacobian_q = full_jacobian @ coupling_jacobian
+            # Optimize in unconstrained latent coordinates. Unlike clipping a
+            # completed q update, this makes joint limits part of every local
+            # linearized solve and preserves a target->joints gradient.
+            dq_dlatent = torch.autograd.functional.jacobian(
+                self._q_from_latent, latent, create_graph=True
+            )
+            jacobian = jacobian_q @ dq_dlatent
             identity = torch.eye(len(DRIVEN_COORDINATES), dtype=DTYPE)
-            normal = jacobian.T @ jacobian + (
-                self.damping + self.posture_weight
-            ) * identity
+            normal = jacobian.T @ jacobian + self.damping * identity
             rhs = jacobian.T @ (predicted - target_osim)
-            rhs = rhs + self.posture_weight * (q - self.rest_radians)
-            q = q - torch.linalg.solve(normal, rhs)
-        return torch.rad2deg(q)
+            primary_step = torch.linalg.solve(normal, rhs)
+            # Hierarchical posture objective: use only the local null space of
+            # the marker task, so choosing a human-like branch does not trade
+            # away reachable Handle accuracy.
+            jacobian_pinv = torch.linalg.solve(normal, jacobian.T)
+            nullspace = identity - jacobian_pinv @ jacobian
+            reference_latent = self._latent_from_q(reference)
+            posture_step = nullspace @ (latent - reference_latent)
+            raw_step = primary_step + self.nullspace_gain * posture_step
+            # A smooth trust region prevents a single linearization from
+            # jumping to another IK branch without severing autograd.
+            scale = self.max_latent_step
+            step = scale * torch.tanh(raw_step / scale)
+            latent = latent - step
+        return torch.rad2deg(self._q_from_latent(latent))
 
     def solve(self, target_xyz_cm: torch.Tensor, initial_degrees=None) -> torch.Tensor:
         """Solve one or more targets while retaining target -> joints autograd."""
@@ -301,7 +363,9 @@ def main():
     ik = NimbleArmIK(
         iterations=config.get("iterations", 12),
         damping=config.get("damping", 1e-5),
-        posture_weight=config.get("posture_weight", 1e-5),
+        joint_limit_margin_degrees=config.get("joint_limit_margin_degrees", 0.5),
+        max_latent_step=config.get("max_latent_step", 1.0),
+        nullspace_gain=config.get("nullspace_gain", 0.1),
     )
     manifest = load_manifest()
     all_errors = []

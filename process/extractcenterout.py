@@ -12,7 +12,7 @@ import numpy as np
 import opensim as osm
 
 from experiment import load_manifest, resolve_artifact, set_artifact
-from paths import MODEL_PATH, MUSCLES_DIR
+from paths import EXPERIMENT_CONFIG, MODEL_PATH, MUSCLES_DIR
 
 MUSCLE_NAMES = [
     'CORB', 'DELT1', 'DELT2', 'DELT3', 'INFSP',
@@ -25,7 +25,12 @@ COORD_LABEL_ORDER = [
     'elv_angle', 'shoulder_elv', 'shoulder_rot',
     'elbow_flexion', 'pro_sup', 'deviation', 'flexion',
 ]
-COORD_ORDER = COORD_LABEL_ORDER
+MUSCLE_CONFIG = EXPERIMENT_CONFIG.get("muscle_lengths", {})
+COORD_ORDER = (
+    COORD_LABEL_ORDER
+    if MUSCLE_CONFIG.get("drive_distal_coordinates", True)
+    else COORD_LABEL_ORDER[:4]
+)
 SHOULDER_MARKER = 'R.Shoulder'
 ELBOW_MARKER = 'R.Elbow.Lateral'
 WRIST_MARKER = 'Handle'

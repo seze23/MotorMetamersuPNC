@@ -7,6 +7,12 @@ outputs/*
 data/cleaned_smooth/
 data/spindles/
 data/**/sampled_coefficients_*.csv
+# These are model inputs, not generated cache: they define the spindle
+# populations paired with the published pretrained checkpoints.
+!data/spindle_coefficients/i_a/linear/sampled_coefficients_i_a_5_0.csv
+!data/spindle_coefficients/ii/linear/sampled_coefficients_ii_5_0.csv
+!data/extended_spindle_coefficients/i_a/linear/sampled_coefficients_i_a_5_*.csv
+!data/extended_spindle_coefficients/ii/linear/sampled_coefficients_ii_5_*.csv
 data.zip
 trained_models.zip
 __pycache__/
