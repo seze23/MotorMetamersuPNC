@@ -24,20 +24,48 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 
 from experiment import load_manifest, resolve_artifact, set_artifact
-from paths import REPO_DIR, PREDICTIONS_DIR, FIGURES_DIR
+from paths import REPO_DIR, PREDICTIONS_DIR, FIGURES_DIR, EXPERIMENT_CONFIG
 sys.path.insert(0, REPO_DIR)
 
 from utils.visualize_sample import get_shoulder_elbow_wrist_loc
 from inference.test_model_utils_new import load_model, parse_config_value
 from train.new_spindle_dataset import SpindleDataset
 
-COEF_SEED  = 0
-TRAIN_SEED = 9
-MODEL_PATH = os.path.join(
-    REPO_DIR,
-    "trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints",
-    f"spatiotemporal_4_8-8-32-64_7171_{COEF_SEED}_{TRAIN_SEED}",
-)
+PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
+MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
+COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
+TRAIN_SEED = int(PROPRIOCEPTION_CONFIG.get("training_seed", 9))
+
+configured_model_path = PROPRIOCEPTION_CONFIG.get("model_path")
+if MODEL_FAMILY == "extended":
+    experiment_dir = (
+        "experiment_causal_flag-pcr_optimized_linear_extended_5_5_"
+        "letter_reconstruction_joints"
+    )
+elif MODEL_FAMILY == "main":
+    experiment_dir = (
+        "experiment_causal_flag-pcr_optimized_linear_5_5_"
+        "letter_reconstruction_joints"
+    )
+    if (COEF_SEED, TRAIN_SEED) != (0, 9):
+        raise ValueError("The main pretrained model is available only as model 0_9")
+else:
+    raise ValueError("proprioception.model_family must be 'main' or 'extended'")
+
+if configured_model_path:
+    MODEL_PATH = os.path.expanduser(str(configured_model_path))
+    if not os.path.isabs(MODEL_PATH):
+        MODEL_PATH = os.path.join(REPO_DIR, MODEL_PATH)
+    MODEL_PATH = os.path.abspath(MODEL_PATH)
+else:
+    MODEL_PATH = os.path.join(
+        REPO_DIR, "trained_models", experiment_dir,
+        f"spatiotemporal_4_8-8-32-64_7171_{COEF_SEED}_{TRAIN_SEED}",
+    )
+if not os.path.isfile(os.path.join(MODEL_PATH, "config.yaml")):
+    raise FileNotFoundError(
+        f"Selected pretrained model is not installed: {MODEL_PATH}"
+    )
 
 BLACK   = "#1a1a1a"
 CRIMSON = "#c0392b"

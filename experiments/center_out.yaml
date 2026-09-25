@@ -26,6 +26,19 @@ ik:
     damping: 0.00001
     posture_weight: 0.00001
 
+proprioception:
+  # "extended" selects one of the 20 robustness models. Use "main" only to
+  # reproduce the paper's single Figure 3 example model.
+  model_family: extended
+  # Optional checkpoint directory, relative to the repository or absolute.
+  # Set this to null to derive the path from model_family and the two seeds.
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  # For extended models, the directory suffix is
+  # {coefficient_seed}_{training_seed}. The spindle generator automatically
+  # uses the same coefficient seed.
+  coefficient_seed: 0
+  training_seed: 9
+
 path:
   # Any Python generator can be selected here. Setting this to
   # process/generate_paths/draw.py opens a GUI for drawing and naming paths.

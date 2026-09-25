@@ -20,8 +20,16 @@ import matplotlib.pyplot as plt
 from scipy.signal import savgol_filter
 
 from experiment import load_manifest, resolve_artifact, set_artifact
-from paths import REPO_DIR, SPINDLES_DIR, FIGURES_DIR
-CONFIG_PATH   = os.path.join(REPO_DIR, "extract_data/configs/train_test_data_spindles_extended.yaml")
+from paths import REPO_DIR, SPINDLES_DIR, FIGURES_DIR, EXPERIMENT_CONFIG
+
+PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
+MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
+COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
+if MODEL_FAMILY not in {"main", "extended"}:
+    raise ValueError("proprioception.model_family must be 'main' or 'extended'")
+CONFIG_PATH = os.path.join(
+    REPO_DIR, "extract_data/configs/train_test_data_spindles_extended.yaml"
+)
 
 sys.path.insert(0, REPO_DIR)
 from utils.spindle_FR_helper import normalize, load_coefficients, get_sampled_coefficients
@@ -45,6 +53,12 @@ PLOT_MUSCLES = {
 # Load config and coefficients once
 with open(CONFIG_PATH) as f:
     config = yaml.safe_load(f)
+config["seed"] = COEF_SEED
+if MODEL_FAMILY == "main":
+    if COEF_SEED != 0:
+        raise ValueError("The main pretrained model uses coefficient seed 0")
+    config["i_a_coeff_path"] = "data/spindle_coefficients/i_a/linear/coefficients.csv"
+    config["ii_coeff_path"] = "data/spindle_coefficients/ii/linear/coefficients.csv"
 config["i_a_coeff_path"] = os.path.join(REPO_DIR, config["i_a_coeff_path"])
 config["ii_coeff_path"]  = os.path.join(REPO_DIR, config["ii_coeff_path"])
 

@@ -3,6 +3,7 @@ This file contains all the functions needed to test the model
 """
 
 import os
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -893,7 +894,7 @@ def load_model(
 ):
     """Load the model from the specified path."""
     # model dir is model_path minus the last two directories
-    model_dir = os.path.join(*model_path.split("/")[:-2])
+    model_dir = str(Path(model_path).resolve().parents[1])
     print(model_dir)
     if "LINEAR" in model_path:
         net = LinearModel
@@ -939,6 +940,10 @@ def load_model(
                 "training_seed", 9
             ),  # default train seed is 9 for mdoel path
         )
+    # The archived Zenodo directory names are shorter than the path synthesized
+    # by the original model class. The caller's path is the authoritative
+    # location of config.yaml and model.ckpt.
+    model.model_path = str(Path(model_path).resolve())
     tester = Tester(model, test_data, device=device)
     tester.load()
     return tester
