@@ -19,3 +19,7 @@ __pycache__/
 *.pyc
 opensim.log
 .ipynb_checkpoints/
+third_party/
+.venv-mujoco/
+.venv-opensim/
+outputs_mujoco/

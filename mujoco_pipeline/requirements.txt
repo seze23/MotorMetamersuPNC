@@ -1,0 +1,18 @@
+# Python 3.14 cannot build the MuJoCo 3.3.0 pin inside myosuite 2.11.6.
+# Install MuJoCo first, then MyoSuite without dependencies:
+#   pip install -r mujoco_pipeline/requirements.txt
+#   pip install "myosuite==2.11.6" --no-deps
+mujoco>=3.2.6
+numpy
+scipy
+matplotlib
+pyyaml
+h5py
+pandas
+tqdm
+gymnasium==0.29.1
+click
+termcolor
+flatten_dict
+gitpython
+nbformat

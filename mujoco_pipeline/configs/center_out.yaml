@@ -1,0 +1,50 @@
+# Same reach protocol as experiments/center_out.yaml, posed on MuJoCo models.
+experiment: mujoco_center_out
+
+sample_rate_hz: 240
+reach_cm: 10.0
+max_displacement_cm: 15.0
+timing_seconds:
+  hold_before: 1.65
+  reach: 0.50
+  hold_target: 0.50
+  return: 0.50
+  hold_after: 1.65
+
+# OpenSim center-out rest pose, in degrees. Wrist stays in the braced grip.
+rest_pose_degrees:
+  elv_angle: 20.0
+  shoulder_elv: 40.0
+  shoulder_rot: 25.0
+  elbow_flexion: 85.0
+locked_wrist_degrees:
+  pro_sup: -30.0
+  deviation: 0.0
+  flexion: 0.0
+
+# Driven shoulder and elbow coordinates. Scapular joints follow each model's
+# shoulder-rhythm equalities and are not solved independently.
+free_joints:
+  - elv_angle
+  - shoulder_elv
+  - shoulder_rot
+  - elbow_flexion
+
+ik:
+  iterations: 20
+  damping: 0.001
+  nullspace_gain: 0.02
+  max_step_rad: 0.15
+  tolerance_m: 0.0005
+
+# Spindle populations shared with the OpenSim pipeline. Rates are computed
+# with the same transfer function. The length reference is each muscle's
+# MuJoCo actuator length at this rest pose, not an OpenSim fiber optimum.
+proprioception:
+  coefficient_seed: 0
+  num_afferents: 5
+
+plot_muscles:
+  - BIClong
+  - TRIlat
+  - DELT1
