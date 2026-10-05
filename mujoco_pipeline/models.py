@@ -133,6 +133,39 @@ def _load_myosuite_arm(config):
     )
 
 
+def _load_corrected_myosuite_arm(config):
+    from mujoco_pipeline.corrected_myoarm import build_corrected_model
+
+    model = build_corrected_model()
+    data = mujoco.MjData(model)
+    actuator_ids = [
+        _id(model, mujoco.mjtObj.mjOBJ_ACTUATOR, name) for name in MUSCLE_NAMES
+    ]
+    return _assemble(
+        name="myosuite_corrected",
+        description=(
+            "Corrected myo-sim 0.2.3 right MyoArm with MoBL-aligned routes "
+            "for DELT2, PECM1, SUPSP, TRIlong, BIClong, and BICshort."
+        ),
+        source="myo-sim==0.2.3 plus mujoco_pipeline.corrected_myoarm patches",
+        model=model,
+        data=data,
+        end_effector=_id(model, mujoco.mjtObj.mjOBJ_SITE, "IFtip_r"),
+        shoulder=_id(model, mujoco.mjtObj.mjOBJ_BODY, "humerus_r"),
+        torso=_id(model, mujoco.mjtObj.mjOBJ_BODY, "torso"),
+        elbow=_id(model, mujoco.mjtObj.mjOBJ_BODY, "ulna_r"),
+        config=config,
+        actuator_ids=actuator_ids,
+        actuator_names=list(MUSCLE_NAMES),
+        muscle_match=["exact"] * len(MUSCLE_NAMES),
+        notes=[
+            "Uses the MoBL fiber adapter before the unchanged Mathis spindle layer.",
+            "Coordinate-dependent path points are represented by polynomially "
+            "coupled MuJoCo slide joints.",
+            "Validated continuous-branch spindle RMSE was 1.633 Hz overall "
+            "with correlation 0.951 on the synthetic paper-envelope audit.",
+        ],
+    )
 def _load_ms_human(config):
     if not MANIPULATION_XML.is_file():
         fetch_ms_human_700()
@@ -215,9 +248,14 @@ def _assemble(
 def load_arm(name, config):
     if name == "myosuite":
         return _load_myosuite_arm(config)
+    if name == "myosuite_corrected":
+        return _load_corrected_myosuite_arm(config)
     if name == "ms_human_700":
         return _load_ms_human(config)
-    raise KeyError(f"Unknown backend {name!r}. Choose myosuite or ms_human_700.")
+    raise KeyError(
+        f"Unknown backend {name!r}. Choose myosuite, myosuite_corrected, "
+        "or ms_human_700."
+    )
 
 
 def joint_value(arm, joint_id):
@@ -244,7 +282,10 @@ def apply_joint_equalities(arm):
         dependent = int(model.eq_obj1id[index])
         if model.jnt_type[independent] != mujoco.mjtJoint.mjJNT_HINGE:
             continue
-        if model.jnt_type[dependent] != mujoco.mjtJoint.mjJNT_HINGE:
+        if model.jnt_type[dependent] not in (
+            mujoco.mjtJoint.mjJNT_HINGE,
+            mujoco.mjtJoint.mjJNT_SLIDE,
+        ):
             continue
         coefficients = model.eq_data[index]
         q_value = data.qpos[model.jnt_qposadr[independent]]

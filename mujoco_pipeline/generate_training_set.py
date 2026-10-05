@@ -32,7 +32,13 @@ from mujoco_pipeline.reaching import (
     to_shoulder_cm,
     track_path,
 )
-from mujoco_pipeline.spindles import firing_rates, record_muscle_lengths, spindle_coefficients
+from mujoco_pipeline.spindles import (
+    MOBL_OPTIMAL_FIBER_LENGTH_MM,
+    firing_rates,
+    musculotendon_to_mobl_fiber_length,
+    record_muscle_lengths,
+    spindle_coefficients,
+)
 from utils.muscle_names import MUSCLE_NAMES
 
 REPO_DIR = Path(__file__).resolve().parents[1]
@@ -54,6 +60,8 @@ def _pose_arm(backend, config):
     center = to_shoulder_cm(end_effector_position(arm), shoulder, axes)
     rest_q = free_qpos(arm)
     rest_lengths = record_muscle_lengths(arm, arm.data.qpos[None, :])[0]
+    if backend == "myosuite_corrected":
+        rest_lengths = MOBL_OPTIMAL_FIBER_LENGTH_MM.copy()
     sample_rate, counts, times = time_base(config)
     if len(times) != 1152:
         raise RuntimeError(
@@ -88,6 +96,8 @@ def _one_trial(arm, rng, config, axes, shoulder, center, rest_q, rest_lengths,
         solved = track_path(arm, path, axes, shoulder, rest_q, config["ik"])
         if float(solved["ik_error_cm"].max()) <= max_error_cm:
             lengths = record_muscle_lengths(arm, solved["joint_qpos"])
+            if arm.name == "myosuite_corrected":
+                lengths = musculotendon_to_mobl_fiber_length(lengths)
             rates, _, _ = firing_rates(
                 lengths, times, rest_lengths,
                 spindle_config, coefficients, sampled, muscles,
@@ -172,7 +182,11 @@ def _attrs(backend, arm, config, rest_lengths, seed, count):
         "muscle_names": np.array(MUSCLE_NAMES, dtype="S"),
         "joint_names": np.array(arm.free_joint_names, dtype="S"),
         "length_reference_mm": rest_lengths,
-        "length_kind": "mujoco_musculotendon_actuator_mm",
+        "length_kind": (
+            "mobl_adapter_fiber_length_mm"
+            if backend == "myosuite_corrected"
+            else "mujoco_musculotendon_actuator_mm"
+        ),
         "label_layout": "wrist_xyz_cm then elv_angle shoulder_elv shoulder_rot elbow_flexion degrees",
         "distribution": (
             "Planar reaches from one braced rest pose. Direction is uniform "
@@ -285,7 +299,11 @@ def generate(backend, num_trials, output, seed, workers, config_path, max_error_
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--backend", choices=("myosuite", "ms_human_700"), default="myosuite")
+    parser.add_argument(
+        "--backend",
+        choices=("myosuite", "myosuite_corrected", "ms_human_700"),
+        default="myosuite",
+    )
     parser.add_argument("--num-trials", type=int, default=30000)
     parser.add_argument(
         "--output",

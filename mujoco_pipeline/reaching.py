@@ -168,7 +168,10 @@ def _coupled_jacobian(arm):
         column = free_index.get(independent)
         if column is None:
             continue
-        if model.jnt_type[dependent] != mujoco.mjtJoint.mjJNT_HINGE:
+        if model.jnt_type[dependent] not in (
+            mujoco.mjtJoint.mjJNT_HINGE,
+            mujoco.mjtJoint.mjJNT_SLIDE,
+        ):
             continue
         coefficients = model.eq_data[index]
         q_value = data.qpos[model.jnt_qposadr[independent]]

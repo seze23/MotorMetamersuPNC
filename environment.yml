@@ -5,6 +5,11 @@ channels:
   - conda-forge
 dependencies:
   - python=3.10
+  - pip
+  - pip:
+      - mujoco>=3.4
+      - myo-sim==0.2.3
+      - myosuite==2.11.6
   - opensim=4.4
   - numpy
   - pandas

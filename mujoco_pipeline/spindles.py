@@ -37,6 +37,45 @@ if _created_torch_stub:
 
 SPINDLE_CONFIG = REPO_DIR / "extract_data" / "configs" / "train_test_data_spindles_extended.yaml"
 
+# Parameters of the 25 muscles in MOBL_ARMS_41_seb_writing_pos.osim, in the
+# canonical MUSCLE_NAMES order. The adapter assumes a rigid tendon and
+# constant muscle thickness h = L0 sin(alpha0).
+MOBL_OPTIMAL_FIBER_LENGTH_MM = np.array([
+    93.2, 97.6, 107.8, 136.7, 75.5, 254.0, 232.4, 278.9, 144.2, 138.5,
+    138.5, 87.3, 68.2, 162.4, 74.1, 27.0, 115.7, 132.1, 85.8, 172.6,
+    81.0, 49.2, 113.8, 134.0, 113.8,
+], dtype=np.float32)
+MOBL_TENDON_SLACK_LENGTH_MM = np.array([
+    97.0, 93.0, 109.5, 38.0, 30.8, 120.0, 176.5, 140.3, 2.8, 89.0,
+    132.0, 33.0, 39.5, 20.0, 71.3, 18.0, 272.3, 192.3, 53.5, 133.0,
+    244.0, 98.0, 98.0, 143.0, 90.8,
+], dtype=np.float32)
+MOBL_OPTIMAL_PENNATION_RAD = np.array([
+    0.4712389, 0.38397244, 0.26179939, 0.31415927, 0.3316126,
+    0.43633231, 0.33161256, 0.36651914, 0.29670597, 0.4537856,
+    0.43633231, 0.34906585, 0.12217305, 0.27925268, 0.41887902,
+    0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.17453293, 0.15707963,
+    0.20943951, 0.15707963,
+], dtype=np.float32)
+
+
+def musculotendon_to_mobl_fiber_length(lengths_mm):
+    """Map MuJoCo musculotendon length to MoBL fiber length in millimeters.
+
+    This is the rigid-tendon, fixed-width pennation geometry used by the
+    Millard equilibrium muscle model. It changes length semantics only; it
+    does not fit or alter posture-dependent tendon routing.
+    """
+    lengths = np.asarray(lengths_mm, dtype=np.float32)
+    if lengths.shape[-1] != len(MUSCLE_NAMES):
+        raise ValueError(
+            f"Expected {len(MUSCLE_NAMES)} muscles on the last axis; "
+            f"received {lengths.shape}"
+        )
+    along_tendon = np.maximum(lengths - MOBL_TENDON_SLACK_LENGTH_MM, 0.0)
+    thickness = MOBL_OPTIMAL_FIBER_LENGTH_MM * np.sin(MOBL_OPTIMAL_PENNATION_RAD)
+    return np.sqrt(along_tendon**2 + thickness**2).astype(np.float32)
+
 
 def spindle_coefficients(seed, n_afferents):
     with SPINDLE_CONFIG.open() as config_file:

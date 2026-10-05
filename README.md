@@ -345,6 +345,37 @@ trajectory, loads it with `SpindleDataset`, reconstructs the causal network from
 the checkpoint configuration, and writes predictions and figures under the
 experiment output directory.
 
+## Corrected MyoArm MuJoCo mode
+
+The `myosuite_corrected` backend composes the right-arm model from pinned
+`myo-sim==0.2.3`, applies the validated MoBL routing corrections, converts
+MuJoCo musculotendon length to fiber length with the rigid-tendon/fixed-width
+adapter, and then uses the unchanged Mathis Ia/II layer.
+
+```powershell
+python -m mujoco_pipeline.pipeline --backend myosuite_corrected
+```
+
+To generate decoder-training trials with the same model and adapter:
+
+```powershell
+python -m mujoco_pipeline.generate_training_set `
+  --backend myosuite_corrected --num-trials 64
+```
+
+The adapter uses the 25-muscle parameters from
+`MOBL_ARMS_41_seb_writing_pos.osim`:
+
+```text
+h  = L0 * sin(alpha0)
+Lf = sqrt(max(LMT - LTS, 0)^2 + h^2)
+```
+
+This changes length semantics; it is not an affine fit and does not change the
+spindle coefficients or CNN weights. See
+`docs/muscle_geometry_adapter_audit.md` for the routing changes, rejected wrap
+branches, and validation results.
+
 ## Changing the OpenSim model
 
 Set `MODEL_PATH` in `process/paths.py`. A replacement model must

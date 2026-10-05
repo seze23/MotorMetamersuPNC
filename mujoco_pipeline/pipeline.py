@@ -16,15 +16,17 @@ import yaml
 from mujoco_pipeline.models import load_arm
 from mujoco_pipeline.reaching import apply_rest_pose, center_out_paths, free_qpos, track_path
 from mujoco_pipeline.spindles import (
+    MOBL_OPTIMAL_FIBER_LENGTH_MM,
     SPINDLE_CONFIG,
     firing_rates,
+    musculotendon_to_mobl_fiber_length,
     record_muscle_lengths,
     spindle_coefficients,
 )
 from utils.muscle_names import MUSCLE_NAMES
 
 REPO_DIR = Path(__file__).resolve().parents[1]
-BACKENDS = ("myosuite", "ms_human_700")
+BACKENDS = ("myosuite", "myosuite_corrected", "ms_human_700")
 
 
 def _experiment_dir(config):
@@ -101,6 +103,10 @@ def _run_backend(name, config, experiment_dir, spindle_bundle):
     apply_rest_pose(arm, config)
     rest_q = free_qpos(arm)
     rest_lengths = record_muscle_lengths(arm, arm.data.qpos[None, :])[0]
+    uses_fiber_adapter = name == "myosuite_corrected"
+    length_reference = (
+        MOBL_OPTIMAL_FIBER_LENGTH_MM.copy() if uses_fiber_adapter else rest_lengths
+    )
     print(
         f"  Rest hand, shoulder-centered cm: "
         f"{np.array2string(center, precision=2)}"
@@ -118,9 +124,13 @@ def _run_backend(name, config, experiment_dir, spindle_bundle):
     for path in paths:
         _save_path(backend_dir, path, axes, shoulder)
         solved = track_path(arm, path, axes, shoulder, rest_q, config["ik"])
-        lengths = record_muscle_lengths(arm, solved["joint_qpos"])
+        musculotendon_lengths = record_muscle_lengths(arm, solved["joint_qpos"])
+        lengths = (
+            musculotendon_to_mobl_fiber_length(musculotendon_lengths)
+            if uses_fiber_adapter else musculotendon_lengths
+        )
         rates, velocity, acceleration = firing_rates(
-            lengths, path["times"], rest_lengths,
+            lengths, path["times"], length_reference,
             spindle_config, coefficients, sampled, muscles,
         )
         joint_degrees = np.degrees(solved["free_qpos"]).astype(np.float32)
@@ -128,8 +138,11 @@ def _run_backend(name, config, experiment_dir, spindle_bundle):
         np.savez(
             muscle_path,
             times=path["times"],
-            actuator_length_mm=lengths,
-            length_reference_mm=rest_lengths,
+            actuator_length_mm=musculotendon_lengths,
+            spindle_input_length_mm=lengths,
+            musculotendon_length_mm=musculotendon_lengths,
+            fiber_length_mm=lengths if uses_fiber_adapter else np.array([], dtype=np.float32),
+            length_reference_mm=length_reference,
             opensim_optimal_fiber_length_mm=opensim_opt,
             joint_angles_deg=joint_degrees,
             joint_names=np.array(arm.free_joint_names),
@@ -138,7 +151,10 @@ def _run_backend(name, config, experiment_dir, spindle_bundle):
             muscle_names=np.array(MUSCLE_NAMES),
             actuator_names=np.array(arm.actuator_names),
             muscle_match=np.array(arm.muscle_match),
-            length_kind="mujoco_musculotendon_actuator_mm",
+            length_kind=(
+                "mobl_adapter_fiber_length_mm" if uses_fiber_adapter
+                else "mujoco_musculotendon_actuator_mm"
+            ),
         )
         spindle_path = backend_dir / "spindles" / f"{path['id']}.npz"
         np.savez(
@@ -184,13 +200,17 @@ def _run_backend(name, config, experiment_dir, spindle_bundle):
         "muscle_names": list(MUSCLE_NAMES),
         "actuator_names": arm.actuator_names,
         "muscle_match": arm.muscle_match,
-        "length_reference_mm": rest_lengths.tolist(),
-        "length_kind": "mujoco_musculotendon_actuator_mm",
+        "length_reference_mm": length_reference.tolist(),
+        "length_kind": (
+            "mobl_adapter_fiber_length_mm" if uses_fiber_adapter
+            else "mujoco_musculotendon_actuator_mm"
+        ),
+        "fiber_adapter": "millard_rigid_tendon_fixed_width" if uses_fiber_adapter else None,
         "trajectories": summaries,
     }
     with (backend_dir / "manifest.yaml").open("w") as manifest_file:
         yaml.safe_dump(manifest, manifest_file, sort_keys=False)
-    _export_example_hdf5(backend_dir, rest_lengths, arm.free_joint_names)
+    _export_example_hdf5(backend_dir, length_reference, arm.free_joint_names)
     return manifest
 
 
@@ -205,7 +225,8 @@ def _export_example_hdf5(backend_dir, length_reference_mm, joint_names):
     lengths, velocities, accelerations, coords, joints = [], [], [], [], []
     for muscle_file in muscle_files:
         data = np.load(muscle_file)
-        length = data["actuator_length_mm"].T[None, ...].astype(np.float32)
+        key = "spindle_input_length_mm" if "spindle_input_length_mm" in data else "actuator_length_mm"
+        length = data[key].T[None, ...].astype(np.float32)
         times = data["times"]
         dt = float(np.median(np.diff(times)))
         velocity = np.gradient(length, dt, axis=2).astype(np.float32)
@@ -248,7 +269,11 @@ def _comparison_figure(experiment_dir, config):
             present.append((name, np.load(spindle_file), np.load(muscle_file)))
     if len(present) < 2:
         return None
-    colors = {"myosuite": "#b45309", "ms_human_700": "#1d4ed8"}
+    colors = {
+        "myosuite": "#b45309",
+        "myosuite_corrected": "#15803d",
+        "ms_human_700": "#1d4ed8",
+    }
     fig, axes = plt.subplots(
         2, len(plot_muscles), figsize=(12, 6), sharex=True, layout="constrained",
     )
@@ -257,7 +282,8 @@ def _comparison_figure(experiment_dir, config):
         for name, spindles, muscles in present:
             times = spindles["times"]
             ia = spindles["firing_rates"][0, :5, muscle_index, :].mean(axis=0)
-            length = muscles["actuator_length_mm"][:, muscle_index]
+            key = "spindle_input_length_mm" if "spindle_input_length_mm" in muscles else "actuator_length_mm"
+            length = muscles[key][:, muscle_index]
             reference = muscles["length_reference_mm"][muscle_index]
             axes[0, column].plot(times, ia, color=colors[name], label=name, linewidth=1.4)
             axes[1, column].plot(
