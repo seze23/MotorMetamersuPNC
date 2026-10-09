@@ -13,6 +13,7 @@ Run:
 
 import os
 import sys
+from pathlib import Path
 import h5py
 import yaml
 import numpy as np
@@ -53,10 +54,22 @@ else:
     raise ValueError("proprioception.model_family must be 'main' or 'extended'")
 
 if configured_model_path:
-    MODEL_PATH = os.path.expanduser(str(configured_model_path))
-    if not os.path.isabs(MODEL_PATH):
-        MODEL_PATH = os.path.join(REPO_DIR, MODEL_PATH)
-    MODEL_PATH = os.path.abspath(MODEL_PATH)
+    configured = Path(os.path.expanduser(str(configured_model_path)))
+    candidates = [configured] if configured.is_absolute() else [Path(REPO_DIR) / configured]
+    # A git worktree does not duplicate ignored pretrained_models/. If this is
+    # a linked worktree, also resolve the configured relative path in the main
+    # checkout that owns the common .git directory.
+    git_pointer = Path(REPO_DIR) / ".git"
+    if not configured.is_absolute() and git_pointer.is_file():
+        pointer = git_pointer.read_text(encoding="utf-8").strip()
+        if pointer.startswith("gitdir:"):
+            worktree_git = Path(pointer.split(":", 1)[1].strip()).resolve()
+            main_checkout = worktree_git.parents[2]
+            candidates.append(main_checkout / configured)
+    MODEL_PATH = str(next(
+        (path.resolve() for path in candidates if (path / "config.yaml").is_file()),
+        candidates[0].resolve(),
+    ))
 else:
     MODEL_PATH = os.path.join(
         REPO_DIR, "trained_models", experiment_dir,

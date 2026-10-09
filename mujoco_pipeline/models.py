@@ -150,7 +150,7 @@ def _load_corrected_myosuite_arm(config):
         source="myo-sim==0.2.3 plus mujoco_pipeline.corrected_myoarm patches",
         model=model,
         data=data,
-        end_effector=_id(model, mujoco.mjtObj.mjOBJ_SITE, "IFtip_r"),
+        end_effector=_id(model, mujoco.mjtObj.mjOBJ_SITE, "MOBL_Handle_r"),
         shoulder=_id(model, mujoco.mjtObj.mjOBJ_BODY, "humerus_r"),
         torso=_id(model, mujoco.mjtObj.mjOBJ_BODY, "torso"),
         elbow=_id(model, mujoco.mjtObj.mjOBJ_BODY, "ulna_r"),
@@ -160,6 +160,8 @@ def _load_corrected_myosuite_arm(config):
         muscle_match=["exact"] * len(MUSCLE_NAMES),
         notes=[
             "Uses the MoBL fiber adapter before the unchanged Mathis spindle layer.",
+            "IK tracks an explicit rigid-hand site corresponding to the OpenSim "
+            "Handle marker rather than the index fingertip.",
             "Coordinate-dependent path points are represented by polynomially "
             "coupled MuJoCo slide joints.",
             "Validated continuous-branch spindle RMSE was 1.633 Hz overall "

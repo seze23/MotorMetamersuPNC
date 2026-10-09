@@ -9,9 +9,9 @@ dependencies:
   - pip:
       - mujoco>=3.4
       - myo-sim==0.2.3
-      - myosuite==2.11.6
   - opensim=4.4
-  - numpy
+  # Compatible with myo-sim (>=1.24), OpenSim, and this SciPy build.
+  - numpy=1.26.4
   - pandas
   - scipy
   - matplotlib

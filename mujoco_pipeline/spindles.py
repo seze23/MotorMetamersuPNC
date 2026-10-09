@@ -58,6 +58,17 @@ MOBL_OPTIMAL_PENNATION_RAD = np.array([
     0.20943951, 0.15707963,
 ], dtype=np.float32)
 
+# Equilibrated OpenSim fiber lengths at the pipeline's canonical braced rest
+# pose (20, 40, 25, 85, -30, 0, 0 degrees). The rigid-tendon adapter preserves
+# posture dependence but not OpenSim's compliant-tendon equilibrium offset.
+MOBL_CANONICAL_REST_FIBER_LENGTH_MM = np.array([
+    78.534477, 112.42647, 79.597488, 124.4935, 82.57122,
+    172.89792, 140.50862, 205.20668, 129.49788, 109.01423,
+    87.411636, 68.763367, 60.044487, 134.5542, 69.761574,
+    19.941072, 103.96536, 129.80994, 69.148018, 131.80704,
+    59.997055, 41.862862, 99.97332, 180.85269, 95.162003,
+], dtype=np.float32)
+
 
 def musculotendon_to_mobl_fiber_length(lengths_mm):
     """Map MuJoCo musculotendon length to MoBL fiber length in millimeters.

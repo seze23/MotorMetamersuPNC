@@ -30,6 +30,23 @@ Run the default experiment described by `experiments/center_out.yaml`:
 python run_pipeline.py --config experiments/center_out.yaml
 ```
 
+The same runner supports either biomechanical implementation through the
+top-level experiment setting:
+
+```yaml
+musculoskeletal_model: opensim
+# or
+musculoskeletal_model: myosuite_corrected
+```
+
+`opensim` uses the configured OpenSim/Nimble IK path and equilibrated OpenSim
+fiber lengths. `myosuite_corrected` automatically uses MuJoCo IK, the corrected
+MyoArm routes, the OpenSim-equivalent rigid-hand `Handle` target, and the MoBL
+fiber-length adapter. At the canonical braced rest pose, a constant per-muscle
+offset aligns the adapter with OpenSim's equilibrated fiber-length origin. Both produce the same manifest,
+muscle-data, spindle-data, and CNN-inference interfaces. Thus the interactive
+`draw.py` generator and `run_pipeline.ipynb` work with either selection.
+
 Use `--through muscle-signals` when the trained checkpoint is not available:
 
 ```powershell
@@ -37,7 +54,8 @@ python run_pipeline.py --config experiments/center_out.yaml --through muscle-sig
 ```
 
 Set `display_simulation: true` in an experiment YAML to pause after motion-file
-generation and open the OpenSim model viewer. The accompanying control window
+generation and open the viewer for the selected model. For OpenSim, the
+accompanying control window
 stays above the 3-D window and lets you select a generated path from the dropdown
 or with Previous/Next, replay it, or continue the pipeline. The 3-D clock shows
 elapsed time while the control window shows elapsed / total time. Playback speed,
@@ -352,6 +370,21 @@ The `myosuite_corrected` backend composes the right-arm model from pinned
 MuJoCo musculotendon length to fiber length with the rigid-tendon/fixed-width
 adapter, and then uses the unchanged Mathis Ia/II layer.
 
+For the complete path-generator/manifest/CNN workflow, select it in an
+experiment CONFIG and use the shared runner:
+
+```yaml
+musculoskeletal_model: myosuite_corrected
+```
+
+```powershell
+# After making that selection in experiments/draw.yaml:
+python run_pipeline.py --config experiments/draw.yaml --through muscle-signals
+```
+
+The standalone command below remains useful for the fixed eight-direction
+MuJoCo comparison experiment.
+
 ```powershell
 python -m mujoco_pipeline.pipeline --backend myosuite_corrected
 ```
@@ -371,10 +404,16 @@ h  = L0 * sin(alpha0)
 Lf = sqrt(max(LMT - LTS, 0)^2 + h^2)
 ```
 
-This changes length semantics; it is not an affine fit and does not change the
-spindle coefficients or CNN weights. See
+The geometric adapter changes length semantics without fitting trajectory
+data, and it does not change the spindle coefficients or CNN weights. See
 `docs/muscle_geometry_adapter_audit.md` for the routing changes, rejected wrap
 branches, and validation results.
+
+For the shared CNN workflow, `muscle_lengths.align_opensim_rest` defaults to
+`true`. This is a one-posture additive calibration, not a trajectory fit: it
+leaves fiber-length changes, velocities, accelerations, and moment arms
+unchanged. It currently requires the canonical `(20, 40, 25, 85)` degree rest
+pose recorded in the notebook.
 
 ## Changing the OpenSim model
 

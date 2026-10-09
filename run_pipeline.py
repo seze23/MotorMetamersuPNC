@@ -5,6 +5,7 @@ line and notebook interfaces execute exactly the same scripts.
 """
 
 import argparse
+import importlib.util
 import os
 import re
 import subprocess
@@ -16,6 +17,7 @@ import yaml
 ROOT = Path(__file__).resolve().parent
 SCRIPT_DIR = ROOT / "process"
 DISPLAY_SCRIPT = SCRIPT_DIR / "utils" / "display_sim.py"
+MUJOCO_DISPLAY_SCRIPT = SCRIPT_DIR / "utils" / "display_mujoco.py"
 STAGES = [
     ("path", None),
     ("inverse-kinematics", "ikcenterout.py"),
@@ -56,6 +58,17 @@ class Pipeline:
             raise FileNotFoundError(
                 f"Configured path generator does not exist: {self.generator}"
             )
+        if self._model() == "myosuite_corrected":
+            missing = [
+                package for package in ("mujoco", "myo_sim")
+                if importlib.util.find_spec(package) is None
+            ]
+            if missing:
+                raise ModuleNotFoundError(
+                    "myosuite_corrected requires missing package(s): "
+                    f"{', '.join(missing)}. Update the active environment with "
+                    "`conda env update -f environment.yml --prune`."
+                )
         self.output_dir = ROOT / "outputs" / self.experiment
 
     def _environment(self):
@@ -69,9 +82,34 @@ class Pipeline:
             raise ValueError(f"Unknown stage {stage!r}; choose from {STAGE_NAMES}")
         if stage == "path":
             return self.generator
+        if self._model() != "opensim":
+            scripts = {
+                "inverse-kinematics": "mujoco_ik.py",
+                "motion": "mujoco_motion.py",
+                "muscle-lengths": "mujoco_extract.py",
+                "muscle-signals": "mujoco_spindles.py",
+                "inference": "centeroutinference.py",
+            }
+            return SCRIPT_DIR / scripts[stage]
         return SCRIPT_DIR / dict(STAGES)[stage]
 
+    def _model(self):
+        name = str(self.config.get("musculoskeletal_model", "opensim")).lower()
+        aliases = {
+            "mobl_opensim": "opensim",
+            "corrected_myoarm": "myosuite_corrected",
+        }
+        name = aliases.get(name, name)
+        if name not in {"opensim", "myosuite_corrected"}:
+            raise ValueError(
+                "musculoskeletal_model must be 'opensim' or "
+                "'myosuite_corrected'"
+            )
+        return name
+
     def _ik_backend(self):
+        if self._model() != "opensim":
+            return "mujoco"
         backend = str(self.config.get("ik", {}).get("backend", "opensim")).lower()
         if backend not in {"opensim", "nimble"}:
             raise ValueError("ik.backend must be either 'opensim' or 'nimble'")
@@ -114,10 +152,13 @@ class Pipeline:
         )
 
     def display_simulation(self):
-        """Open the motion-review UI for motions produced by the motion stage."""
-        print("\n=== motion-review: OpenSim visualizer ===", flush=True)
+        """Open the model-appropriate viewer for the generated motions."""
+        is_mujoco = self._model() != "opensim"
+        viewer = MUJOCO_DISPLAY_SCRIPT if is_mujoco else DISPLAY_SCRIPT
+        label = "MuJoCo" if is_mujoco else "OpenSim"
+        print(f"\n=== motion-review: {label} visualizer ===", flush=True)
         return subprocess.run(
-            [sys.executable, str(DISPLAY_SCRIPT)], cwd=ROOT,
+            [sys.executable, str(viewer)], cwd=ROOT,
             env=self._environment(), check=True,
         )
 

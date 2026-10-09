@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from experiment import create_manifest, relative_artifact, validate_path_artifact
 from paths import EXPERIMENT_CONFIG, MODEL_PATH, PATHS_DIR
 from utils.visualize_sample import get_shoulder_elbow_wrist_loc
+from mujoco_pipeline.experiment_config import arm_config, selected_model
 
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 DIRECTIONS = {
@@ -29,6 +30,17 @@ def minimum_jerk(count):
 
 
 def model_rest_center(rest_pose):
+    selected = selected_model(EXPERIMENT_CONFIG)
+    if selected != "opensim":
+        from mujoco_pipeline.models import end_effector_position, load_arm
+        from mujoco_pipeline.reaching import apply_rest_pose, shoulder_axes, to_shoulder_cm
+
+        config = arm_config(EXPERIMENT_CONFIG)
+        arm = load_arm(selected, config)
+        apply_rest_pose(arm, config)
+        axes, shoulder = shoulder_axes(arm)
+        return to_shoulder_cm(end_effector_position(arm), shoulder, axes)
+
     model = osm.Model(MODEL_PATH)
     state = model.initSystem()
     coordinates = model.getCoordinateSet()

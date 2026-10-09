@@ -87,6 +87,17 @@ def _patched_fragments():
 """
     chain = _replace_once(chain, '                                <site name="PECM1_PECM1-P2_r"', pecm1 + '                                <site name="PECM1_PECM1-P2_r"', "PECM1 moving point")
     chain = _replace_once(chain, '                                <site name="BIClong_BIClong-P4_r"', '                                <site name="BIClong_ellipsoid_BIClong_3_sidesite_r" pos="0.02241 0.00769 0.01105"/>\n                                <site name="BIClong_ellipsoid_BIClong_4_sidesite_r" pos="0.02263 -0.007683 0.01083"/>\n                                <site name="BIClong_BIClong-P4_r"', "BIClong side sites")
+    # OpenSim tracks the Handle marker on the rigid hand, not an index fingertip.
+    # This trapezium-frame point is the converted rigid-hand Handle location.
+    # Its physical rest pose corresponds to the OpenSim marker; numeric task
+    # coordinates depend on each engine's registered world-frame convention.
+    chain = _replace_once(
+        chain,
+        '<site name="S_grasp_r" pos="-0.011 -0.06 -0.03" size=".01" group="3"/>',
+        '<site name="S_grasp_r" pos="-0.011 -0.06 -0.03" size=".01" group="3"/>\n'
+        '                                                    <site name="MOBL_Handle_r" pos="0.0112114 -0.09932261 -0.02193155" size=".006" group="3"/>',
+        "OpenSim Handle site",
+    )
     bicshort = """                                        <body name="BICshort_default_r" pos="0 0 0">
                                             <inertial pos="0 0 0" mass="0.001" diaginertia="1e-8 1e-8 1e-8"/>
                                             <joint name="BICshort_default_x_r" type="slide" axis="1 0 0" range="-0.0055 0.01096"/>

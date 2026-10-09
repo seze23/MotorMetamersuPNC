@@ -1,4 +1,5 @@
 experiment: drawn_paths
+musculoskeletal_model: opensim
 display_simulation: true
 
 visualization:

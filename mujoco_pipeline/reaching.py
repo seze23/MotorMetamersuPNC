@@ -41,19 +41,31 @@ def time_base(config):
 
 
 def shoulder_axes(arm):
-    """Right, forward, and up, expressed as columns in the MuJoCo world frame."""
+    """OpenSim task X, forward, and up in the MuJoCo world frame.
+
+    The paper pipeline's ``S2W`` transform is right-handed.  The former
+    construction used shoulder-minus-torso followed by ``cross(right, up)``;
+    those three columns had determinant -1 and reflected lateral reaches.
+    The OpenSim task-X direction for the right arm points from the shoulder
+    toward the torso.  Together with ``cross(up, task_x)`` this gives the
+    corresponding right-handed basis without changing any path labels or
+    decoded outputs after the fact.
+    """
     shoulder = body_position(arm, arm.shoulder_body_id)
     torso = body_position(arm, arm.torso_body_id)
     up = np.array([0.0, 0.0, 1.0])
-    right = shoulder - torso
-    right[2] = 0.0
-    norm = np.linalg.norm(right)
+    task_x = torso - shoulder
+    task_x[2] = 0.0
+    norm = np.linalg.norm(task_x)
     if norm < 1e-6:
         raise RuntimeError("Shoulder and torso are vertically aligned.")
-    right /= norm
-    forward = np.cross(right, up)
+    task_x /= norm
+    forward = np.cross(up, task_x)
     forward /= np.linalg.norm(forward)
-    return np.column_stack([right, forward, up]), shoulder
+    axes = np.column_stack([task_x, forward, up])
+    if np.linalg.det(axes) < 0.0:
+        raise RuntimeError("Shoulder task frame must be right-handed.")
+    return axes, shoulder
 
 
 def to_shoulder_cm(point_m, shoulder_m, axes):

@@ -3,7 +3,7 @@
 #   pip install -r mujoco_pipeline/requirements.txt
 #   pip install "myosuite==2.11.6" --no-deps
 mujoco>=3.2.6
-numpy
+numpy>=1.24,<2
 scipy
 matplotlib
 pyyaml

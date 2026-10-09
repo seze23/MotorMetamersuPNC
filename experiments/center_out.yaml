@@ -1,4 +1,5 @@
 experiment: center_out
+musculoskeletal_model: opensim
 display_simulation: false
 
 visualization:
