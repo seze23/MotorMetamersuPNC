@@ -35,6 +35,7 @@ from train.new_spindle_dataset import SpindleDataset
 PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
 MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
 COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
+MODEL_COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("model_coefficient_seed", COEF_SEED))
 TRAIN_SEED = int(PROPRIOCEPTION_CONFIG.get("training_seed", 9))
 
 configured_model_path = PROPRIOCEPTION_CONFIG.get("model_path")
@@ -48,7 +49,7 @@ elif MODEL_FAMILY == "main":
         "experiment_causal_flag-pcr_optimized_linear_5_5_"
         "letter_reconstruction_joints"
     )
-    if (COEF_SEED, TRAIN_SEED) != (0, 9):
+    if (MODEL_COEF_SEED, TRAIN_SEED) != (0, 9):
         raise ValueError("The main pretrained model is available only as model 0_9")
 else:
     raise ValueError("proprioception.model_family must be 'main' or 'extended'")
@@ -73,7 +74,7 @@ if configured_model_path:
 else:
     MODEL_PATH = os.path.join(
         REPO_DIR, "trained_models", experiment_dir,
-        f"spatiotemporal_4_8-8-32-64_7171_{COEF_SEED}_{TRAIN_SEED}",
+        f"spatiotemporal_4_8-8-32-64_7171_{MODEL_COEF_SEED}_{TRAIN_SEED}",
     )
 if not os.path.isfile(os.path.join(MODEL_PATH, "config.yaml")):
     raise FileNotFoundError(
