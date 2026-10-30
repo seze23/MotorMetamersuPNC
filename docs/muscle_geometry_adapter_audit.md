@@ -96,6 +96,136 @@ This distinction creates two separable kinds of error:
 1. **Posture-dependent error.** If attachments, moving points, or wraps are wrong, the change in musculotendon length with posture is wrong. The muscle-path corrections in Section B address this.
 2. **Absolute-origin error.** Even with the correct length change, the rigid-tendon approximation can assign a different constant amount of the total length to fiber than OpenSim's elastic equilibrium solution. The rest alignment addresses this.
 
+#### When is the discrepancy actually a constant?
+
+It is important not to assume that elastic-tendon physics makes the OpenSim–adapter difference exactly constant. For muscle `i`, define the two posture-dependent fiber-length functions and their discrepancy:
+
+```text
+L_f_OS_i(q)       = equilibrated OpenSim fiber length
+L_f_adapter_i(q)  = rigid-tendon MuJoCo adapter length
+D_i(q)            = L_f_OS_i(q) - L_f_adapter_i(q).
+```
+
+Differentiating with respect to the vector of joint coordinates `q` gives
+
+```text
+grad D_i(q) = grad L_f_OS_i(q) - grad L_f_adapter_i(q).
+```
+
+If the two models have the same posture dependence throughout a connected task region,
+
+```text
+grad L_f_OS_i(q) = grad L_f_adapter_i(q),
+```
+
+then `grad D_i(q) = 0`, and therefore
+
+```text
+D_i(q) = Delta_i,
+
+L_f_OS_i(q) = L_f_adapter_i(q) + Delta_i.
+```
+
+Equivalently, for any two task postures `q_a` and `q_b`,
+
+```text
+L_f_OS_i(q_b) - L_f_OS_i(q_a)
+    = L_f_adapter_i(q_b) - L_f_adapter_i(q_a).
+```
+
+Thus two length functions that have the same excursion between all postures can differ only in their choice of origin. This is the mathematical condition that justifies an additive alignment. In this project it is approximate rather than assumed exact: the routing and held-out spindle comparisons provide evidence that the gradients are sufficiently close over the intended reaching workspace.
+
+#### Connection to routing and moment arms
+
+For joint `j`, musculotendon moment arm is the negative derivative of path length:
+
+```text
+r_ij(q) = -partial L_MT_i(q) / partial q_j.
+```
+
+For the adapter, define
+
+```text
+x_i(q) = L_MT_i(q) - L_TS_i
+h_i    = L_0_i sin(alpha_0_i)
+
+L_f_adapter_i(q) = sqrt(x_i(q)^2 + h_i^2).
+```
+
+Away from the zero clamp, differentiation gives
+
+```text
+partial L_f_adapter_i / partial q_j
+    = [x_i / sqrt(x_i^2 + h_i^2)] partial L_MT_i / partial q_j
+    = cos(alpha_i) partial L_MT_i / partial q_j
+    = -cos(alpha_i) r_ij(q).
+```
+
+This shows why attachments, moving points, wraps, and wrap branches must be corrected before applying a rest offset. Matching the path geometry and moment arms makes the posture derivative of the adapter length match the OpenSim derivative. A constant offset can then align their origins. If the moment arms are wrong, the derivative mismatch accumulates with movement and no constant can repair it.
+
+#### Zeroth-order alignment and the remaining error
+
+Expanding both models around the canonical rest posture `q_rest` makes the approximation explicit:
+
+```text
+L_f_OS_i(q)
+  = L_f_OS_i(q_rest)
+  + J_OS_i (q - q_rest)
+  + 1/2 (q - q_rest)^T H_OS_i (q - q_rest) + ...
+
+L_f_adapter_i(q)
+  = L_f_adapter_i(q_rest)
+  + J_adapter_i (q - q_rest)
+  + 1/2 (q - q_rest)^T H_adapter_i (q - q_rest) + ...
+```
+
+Subtracting gives
+
+```text
+D_i(q)
+  = [L_f_OS_i(q_rest) - L_f_adapter_i(q_rest)]       constant term
+  + [J_OS_i - J_adapter_i] (q - q_rest)              first-order error
+  + 1/2 (q - q_rest)^T [H_OS_i - H_adapter_i]
+                         (q - q_rest) + ...           higher-order error.
+```
+
+The rest correction removes the first bracketed term exactly. Corrected routing and the limited task envelope make the derivative and curvature terms small; the alignment does not remove them.
+
+After applying the rest offset, the exact residual at an arbitrary posture is
+
+```text
+E_i(q)
+  = L_f_OS_i(q) - L_f_used_i(q)
+  = D_i(q) - D_i(q_rest)
+  = integral from q_rest to q of
+      [grad L_f_OS_i(s) - grad L_f_adapter_i(s)] dot ds.
+```
+
+This final expression states the limitation precisely. If the gradients match, the residual is zero everywhere. If they nearly match, the residual remains small. If routing is wrong, the gradient difference integrates into a posture-dependent error.
+
+#### Why tendon compliance can appear mainly as an offset
+
+The adapter assigns the tendon its slack length:
+
+```text
+L_T_adapter = L_TS.
+```
+
+OpenSim instead permits equilibrium tendon stretch,
+
+```text
+L_T_OS(q) = L_TS + delta L_T(q).
+```
+
+Ignoring a small pennation difference for illustration, the projected fibers satisfy
+
+```text
+L_f_OS cos(alpha)      = L_MT_OS - L_TS - delta L_T(q)
+L_f_adapter cos(alpha) = L_MT_MJ - L_TS.
+```
+
+If corrected routing gives `L_MT_OS(q) approximately L_MT_MJ(q)` and equilibrium tendon stretch varies little over the task, `delta L_T(q) approximately delta L_T(q_rest)`, then the resulting fiber discrepancy is dominated by a posture-independent term. Larger changes in activation, tendon force, posture, or wrapping can violate this approximation, which is why the offset is restricted to the validated task and rest condition.
+
 Why does an absolute offset matter? The Mathis spindle layer receives normalized fiber length as well as fiber velocity and acceleration. A constant fiber-length difference leaves velocity and acceleration unchanged, but changes the tonic length-dependent firing rate during a stationary hold. The CNN was trained on those OpenSim tonic firing patterns and uses them to infer absolute arm posture. Matching only movement-related rate changes is therefore insufficient for an absolute-position decoder.
 
 Normalizing by `L_0` does not remove this problem. `L_0` is a scale—the optimal fiber length—not the actual fiber length at the experiment's rest posture. Dividing two signals by the same `L_0` preserves any difference between their absolute fiber lengths.
@@ -126,6 +256,35 @@ L_f_used_i(q) = L_f_adapter_i(q) + offset_i.
 ```
 
 For each muscle, `L_f_OpenSim(q_rest)` is obtained by posing the MoBL OpenSim model at the declared rest posture, equilibrating its muscles, and reading the resulting fiber length. `L_f_adapter(q_rest)` is obtained by posing corrected MyoArm identically, reading MuJoCo musculotendon length, and applying the geometric adapter. Their difference is stored as that muscle's offset.
+
+Written in full, the calculation is
+
+```text
+L_f_adapter_i(q_rest)
+  = sqrt(
+      max(L_MT_MJ_i(q_rest) - L_TS_i, 0)^2
+      + [L_0_i sin(alpha_0_i)]^2
+    )
+
+Delta_i
+  = L_f_OS_i(q_rest) - L_f_adapter_i(q_rest)
+
+L_f_used_i(q)
+  = sqrt(
+      max(L_MT_MJ_i(q) - L_TS_i, 0)^2
+      + [L_0_i sin(alpha_0_i)]^2
+    ) + Delta_i.
+```
+
+At the calibration posture this is exact by construction:
+
+```text
+L_f_used_i(q_rest)
+  = L_f_adapter_i(q_rest)
+  + L_f_OS_i(q_rest)
+  - L_f_adapter_i(q_rest)
+  = L_f_OS_i(q_rest).
+```
 
 The two values used for muscle `i` therefore come from different calculations but the same declared posture:
 
