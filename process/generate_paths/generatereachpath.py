@@ -72,7 +72,7 @@ def legacy_training_rest_center(rest_pose):
 def generate():
     config = EXPERIMENT_CONFIG["path"]
     sample_rate = float(config["sample_rate_hz"])
-    reach_cm = float(config["reach_cm"])
+    reach_cm = float(config.get("reach_cm", 10.0))
     rest_pose = config["rest_pose_degrees"]
     timing = config["timing_seconds"]
     segment_names = ("hold_before", "reach", "hold_target", "return", "hold_after")
@@ -97,12 +97,20 @@ def generate():
     trajectories = []
 
     selected_directions = config.get("directions_degrees")
-    directions = DIRECTIONS if selected_directions is None else {
-        int(degrees): DIRECTIONS[int(degrees)] for degrees in selected_directions
-    }
-    for degrees, trajectory_id in directions.items():
+    direction_degrees = list(DIRECTIONS) if selected_directions is None else [
+        int(degrees) for degrees in selected_directions
+    ]
+    radii = [float(value) for value in config.get("radii_cm", [reach_cm])]
+    grid_mode = "radii_cm" in config
+    for degrees in direction_degrees:
+      for radius_cm in radii:
+        if grid_mode:
+            radius_label = f"{radius_cm:g}".replace(".", "p")
+            trajectory_id = f"g{degrees:03d}_r{radius_label}"
+        else:
+            trajectory_id = DIRECTIONS.get(degrees, f"g{degrees:03d}")
         angle = np.radians(degrees)
-        target = center + reach_cm * np.array([np.cos(angle), np.sin(angle), 0.0])
+        target = center + radius_cm * np.array([np.cos(angle), np.sin(angle), 0.0])
         xyz = np.empty((n_total, 3), dtype=np.float32)
         cursor = 0
         xyz[cursor:cursor + counts["hold_before"]] = center
@@ -128,6 +136,8 @@ def generate():
             target_xyz=target,
             rest_posture=np.array(list(rest_pose.values())),
             trajectory_id=trajectory_id,
+            direction_degrees=float(degrees),
+            radius_cm=float(radius_cm),
             position_units="cm",
             coordinate_frame="shoulder_centered_world",
             sample_rate_hz=sample_rate,
@@ -138,6 +148,8 @@ def generate():
             "desired_path": relative_artifact(output),
             "samples": n_total,
             "sample_rate_hz": sample_rate,
+            "direction_degrees": float(degrees),
+            "radius_cm": float(radius_cm),
         })
         print(f"  {trajectory_id:<20} {n_total} samples -> {output}")
 
