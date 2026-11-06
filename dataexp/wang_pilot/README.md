@@ -46,6 +46,12 @@ to true, which visually reversed that decoder-error direction. Old raw analytic
 errors and new physical Handle errors are retained as separate quantities and
 must not be numerically pooled.
 
+`pilot_figure3_style.png` is the Figure 3a-style pilot map. Pale arrows show
+individual matched models and the bold purple arrows show the across-model
+mean, always from achieved to decoded position. The plot includes anatomical
+centimeter ticks, a C7-centered torso cue, and the common center-out origin.
+The SVG copy is provided for lossless editing.
+
 Reproduce the pilot with:
 
 ```powershell
