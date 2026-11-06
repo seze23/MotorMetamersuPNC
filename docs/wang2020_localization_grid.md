@@ -22,6 +22,13 @@ not rings centered on the shoulder or resting hand.
   KINARM-like center posture; C7 defines the horizontal body reference but not
   the table height.
 
+In the MoBL-ARMS ground frame, anatomical `(right, forward, up)` is OpenSim
+`(Z, X, Y)`. The older pipeline's `S2W` array instead produces
+`(left, backward, up)` and must not be used as an anatomical body frame. Path
+targets may be converted into that legacy IK input convention internally, but
+all saved experimental positions and signed errors use the C7-relative
+anatomical convention defined here.
+
 ## Final target coordinates
 
 The paper used 100 targets in 5 rows by 20 columns. Its workspace was 48.76 cm

@@ -65,6 +65,10 @@ For the right arm:
 - positive depth error is forward, away from the body; and
 - negative depth error is backward, toward the body.
 
+The explicit OpenSim mapping is `(right, forward, up) = (Z, X, Y)`, with C7 as
+the positional origin. The legacy center-out `S2W` mapping has the opposite
+horizontal signs and is not an anatomical reporting frame.
+
 Plots of decoder error must draw arrows from actual to predicted position. A
 predicted visual-matching error, if shown later, is a different quantity with
 approximately the opposite sign and must be plotted separately.

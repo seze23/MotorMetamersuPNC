@@ -13,6 +13,7 @@ import opensim as osm
 
 from experiment import load_manifest, resolve_artifact, set_artifact
 from paths import EXPERIMENT_CONFIG, MODEL_PATH, MUSCLES_DIR
+from body_coordinates import opensim_to_body_cm
 
 MUSCLE_NAMES = [
     'CORB', 'DELT1', 'DELT2', 'DELT3', 'INFSP',
@@ -32,6 +33,7 @@ COORD_ORDER = COORD_LABEL_ORDER
 SHOULDER_MARKER = 'R.Shoulder'
 ELBOW_MARKER = 'R.Elbow.Lateral'
 WRIST_MARKER = 'Handle'
+C7_MARKER = 'C7'
 S2W = np.array([[0, 0, -1], [-1, 0, 0], [0, 1, 0]])
 
 
@@ -68,6 +70,9 @@ def process_motion(trajectory_id, mot_path):
     model.realizePosition(state)
     reference_origin_ground = _vec3_to_numpy(
         marker_set.get(SHOULDER_MARKER).getLocationInGround(state)
+    )
+    body_origin_ground = _vec3_to_numpy(
+        marker_set.get(C7_MARKER).getLocationInGround(state)
     )
 
     motion = osm.TimeSeriesTable(mot_path)
@@ -121,6 +126,9 @@ def process_motion(trajectory_id, mot_path):
     reference_origin_world = (S2W @ reference_origin_ground) * 100
     wrist_centered = wrist_world - reference_origin_world
     elbow_centered = elbow_world - reference_origin_world
+    shoulder_body = opensim_to_body_cm(shoulder_xyz, body_origin_ground)
+    elbow_body = opensim_to_body_cm(elbow_xyz, body_origin_ground)
+    wrist_body = opensim_to_body_cm(wrist_xyz, body_origin_ground)
 
     np.savez(
         out_npz,
@@ -131,6 +139,10 @@ def process_motion(trajectory_id, mot_path):
         elbow_xyz_world=elbow_centered,
         reference_origin_world=reference_origin_world,
         shoulder_xyz_world=shoulder_world,
+        wrist_xyz_body=wrist_body,
+        elbow_xyz_body=elbow_body,
+        shoulder_xyz_body=shoulder_body,
+        body_origin_ground=body_origin_ground,
         coord_names=np.array(COORD_LABEL_ORDER),
         muscle_names=np.array(MUSCLE_NAMES),
     )
