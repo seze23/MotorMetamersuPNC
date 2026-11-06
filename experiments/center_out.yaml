@@ -14,11 +14,12 @@ ik:
   # Rigidly brace wrist motion and forearm rotation, as in the KINARM setup.
   lock_wrist: true
   locked_wrist_degrees:
-    # KINARM grip: the palm/opening faces upward; wrist bend remains neutral.
-    pro_sup: -30.0
+    # Match the fixed distal state used to generate the decoder training data.
+    pro_sup: 0.0
     deviation: 0.0
     flexion: 0.0
   # Keeps the underconstrained one-marker IK solution near the configured pose.
+  marker_weight: 10000.0
   coordinate_regularization_weight: 0.001
   nimble:
     wsl_distribution: Ubuntu
@@ -50,9 +51,8 @@ proprioception:
   temporal_padding_mode: replicate
 
 muscle_lengths:
-  # Match the training-data generator: the published network's 25 muscle
-  # signals were generated from these four shoulder/elbow coordinates.
-  drive_distal_coordinates: false
+  # Replay the complete IK state when evaluating markers and muscle lengths.
+  drive_distal_coordinates: true
 
 path:
   # Any Python generator can be selected here. Setting this to

@@ -119,6 +119,7 @@ IK_CONFIG = EXPERIMENT_CONFIG.get("ik", {})
 COORDINATE_REGULARIZATION_WEIGHT = float(
     IK_CONFIG.get("coordinate_regularization_weight", 0.001)
 )
+MARKER_WEIGHT = float(IK_CONFIG.get("marker_weight", 10000.0))
 LOCK_WRIST = bool(IK_CONFIG.get("lock_wrist", True))
 LOCKED_WRIST_DEGREES = IK_CONFIG.get("locked_wrist_degrees", {
     "pro_sup": 0.0,
@@ -250,7 +251,7 @@ for trajectory in trajectories:
     handle_task = osm.IKMarkerTask()
     handle_task.setName('Handle')
     handle_task.setApply(True)
-    handle_task.setWeight(100.0)
+    handle_task.setWeight(MARKER_WEIGHT)
     marker_task_set.cloneAndAppend(handle_task)
 
     if COORDINATE_REGULARIZATION_WEIGHT > 0:

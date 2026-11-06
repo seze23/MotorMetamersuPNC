@@ -138,19 +138,22 @@ sweep. It is shifted toward the torso because the resting hand is not at the
 center of the anatomical workspace. This boundary is intended for exploratory
 testing; controlled experiments should normally use a scripted path generator.
 
-Because the IK stage tracks only the hand marker, it also applies a very small
+Because the IK stage tracks only the hand marker, it also applies a small
 rest-pose coordinate weight (`ik.coordinate_regularization_weight`) to select a
 stable solution among the many joint postures that can place the hand at the
-same point. Set the weight to `0` to recover unregularized one-marker IK.
+same point. The supplied OpenSim configurations give the marker a much larger
+weight (`ik.marker_weight`) so this posture tie-breaker does not materially
+trade Cartesian accuracy for posture. Set the regularization weight to `0` to
+recover unregularized one-marker IK.
 Set `ik.lock_wrist: true` to brace `pro_sup`, `deviation`, and `flexion` at the
 values in `ik.locked_wrist_degrees`. This prevents position-only OpenSim IK from
 using unobserved wrist motion to reach the Handle marker. It locks the hand to
 the forearm; the entire rigid hand can still rotate in the world as the arm
 moves. The Nimble backend currently requires this setting because its derived
 model welds the unsupported distal wrist joints. The supplied experiment
-configs use the visually calibrated KINARM bottle-grip pose `pro_sup: -30`,
-with zero wrist flexion/deviation. Path generation uses the same brace pose
-when calculating the resting Handle location.
+configs use the decoder-training distal state (`pro_sup: 0`, zero wrist
+flexion/deviation). Path generation, IK, motion replay, marker evaluation, and
+muscle extraction all use this same complete coordinate state.
 
 ### Differentiable Nimble IK
 

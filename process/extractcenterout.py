@@ -25,12 +25,10 @@ COORD_LABEL_ORDER = [
     'elv_angle', 'shoulder_elv', 'shoulder_rot',
     'elbow_flexion', 'pro_sup', 'deviation', 'flexion',
 ]
-MUSCLE_CONFIG = EXPERIMENT_CONFIG.get("muscle_lengths", {})
-COORD_ORDER = (
-    COORD_LABEL_ORDER
-    if MUSCLE_CONFIG.get("drive_distal_coordinates", True)
-    else COORD_LABEL_ORDER[:4]
-)
+# Replay the complete IK state. The Handle marker and several selected muscles
+# depend on the distal coordinates even when those coordinates are braced and
+# constant throughout a trial.
+COORD_ORDER = COORD_LABEL_ORDER
 SHOULDER_MARKER = 'R.Shoulder'
 ELBOW_MARKER = 'R.Elbow.Lateral'
 WRIST_MARKER = 'Handle'
@@ -57,6 +55,20 @@ def process_motion(trajectory_id, mot_path):
     muscles = [muscle_set.get(name) for name in MUSCLE_NAMES]
     markers = [marker_set.get(name) for name in
                (SHOULDER_MARKER, ELBOW_MARKER, WRIST_MARKER)]
+
+    # Use the exact fixed origin used by path generation, rather than the
+    # shoulder from the first redundant one-marker IK solution.
+    reference_pose = dict(EXPERIMENT_CONFIG["path"]["rest_pose_degrees"])
+    if EXPERIMENT_CONFIG.get("ik", {}).get("lock_wrist", True):
+        reference_pose.update(
+            EXPERIMENT_CONFIG.get("ik", {}).get("locked_wrist_degrees", {})
+        )
+    for name, degrees in reference_pose.items():
+        coord_set.get(name).setValue(state, np.radians(float(degrees)))
+    model.realizePosition(state)
+    reference_origin_ground = _vec3_to_numpy(
+        marker_set.get(SHOULDER_MARKER).getLocationInGround(state)
+    )
 
     motion = osm.TimeSeriesTable(mot_path)
     column_names = list(motion.getColumnLabels())
@@ -101,8 +113,14 @@ def process_motion(trajectory_id, mot_path):
     shoulder_world = (S2W @ shoulder_xyz.T).T * 100
     elbow_world = (S2W @ elbow_xyz.T).T * 100
     wrist_world = (S2W @ wrist_xyz.T).T * 100
-    wrist_centered = wrist_world - shoulder_world
-    elbow_centered = elbow_world - shoulder_world
+    # Desired OpenSim paths are expressed relative to the shoulder position at
+    # the initial reference posture, then converted to fixed ground targets.
+    # Keep that origin fixed during replay: the MoBL scapular couplers translate
+    # R.Shoulder as the arm moves, so subtracting its value frame by frame would
+    # turn a ground-fixed Cartesian target into a moving shoulder-relative one.
+    reference_origin_world = (S2W @ reference_origin_ground) * 100
+    wrist_centered = wrist_world - reference_origin_world
+    elbow_centered = elbow_world - reference_origin_world
 
     np.savez(
         out_npz,
@@ -111,6 +129,8 @@ def process_motion(trajectory_id, mot_path):
         joint_angles=joint_angles,
         wrist_xyz_world=wrist_centered,
         elbow_xyz_world=elbow_centered,
+        reference_origin_world=reference_origin_world,
+        shoulder_xyz_world=shoulder_world,
         coord_names=np.array(COORD_LABEL_ORDER),
         muscle_names=np.array(MUSCLE_NAMES),
     )
