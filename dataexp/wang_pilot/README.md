@@ -25,6 +25,15 @@ the two lateral targets. The lateral pattern is therefore mostly consistent
 with the homologous right-hand behavioral prediction, but it reverses at the
 rightmost pilot target and the depth effect is not globally consistent.
 
+The other three valid coefficient-seed-0 checkpoints were run on the identical
+spindle signals. Across these four models, 14 of 20 target-level late-hold
+errors are outward. All four models are outward at center, far-center, and the
+retained crossed-midline target; all four are inward at the +18.285 cm right
+target; and the near target splits two outward versus two inward. Every model's
+five-target mean is outward (+0.625 to +0.941 cm). The ensemble-mean depth bias
+is location-dependent and much less coherent. See
+`pilot_valid_seed_ensemble_summary.csv` for every target and time window.
+
 `old_model_0_9_summary.csv` is a provenance snapshot calculated from
 `main:dataexp/centerout/multi_seed_results_matched.csv`. In the old analytic
 coordinate convention, positive X was labeled rightward. Model 0_9's mean raw

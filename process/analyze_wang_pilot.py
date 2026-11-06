@@ -13,7 +13,6 @@ from paths import EXPERIMENT_CONFIG, MODEL_PATH, PREDICTIONS_DIR, REPO_DIR
 
 
 OUTPUT_DIR = Path(REPO_DIR) / "dataexp" / "wang_pilot"
-OUTPUT_CSV = OUTPUT_DIR / "pilot_model_0_9_bias.csv"
 COORDS = ("elv_angle", "shoulder_elv", "shoulder_rot", "elbow_flexion")
 
 
@@ -23,6 +22,11 @@ def marker_xyz(markers, name, state):
 
 
 def main():
+    proprioception = EXPERIMENT_CONFIG["proprioception"]
+    coefficient_seed = int(proprioception["coefficient_seed"])
+    training_seed = int(proprioception["training_seed"])
+    model_name = f"{coefficient_seed}_{training_seed}"
+    output_csv = OUTPUT_DIR / f"pilot_model_{model_name}_bias.csv"
     rate = float(EXPERIMENT_CONFIG["path"]["sample_rate_hz"])
     pre = round(EXPERIMENT_CONFIG["path"]["timing_seconds"]["hold_before"] * rate)
     reach = round(EXPERIMENT_CONFIG["path"]["timing_seconds"]["reach"] * rate)
@@ -87,7 +91,8 @@ def main():
             ]].to_numpy().mean(axis=0)
             raw_error = raw_pred - raw_true
             rows.append({
-                "model": "0_9", "coefficient_seed": 0, "training_seed": 9,
+                "model": model_name, "coefficient_seed": coefficient_seed,
+                "training_seed": training_seed,
                 "target": target_id, "window": window_name,
                 "requested_right_cm": target_body[0],
                 "requested_forward_cm": target_body[1],
@@ -108,10 +113,24 @@ def main():
 
     result = pd.DataFrame(rows)
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    result.to_csv(OUTPUT_CSV, index=False)
+    result.to_csv(output_csv, index=False)
+    model_files = sorted(OUTPUT_DIR.glob("pilot_model_*_bias.csv"))
+    ensemble = pd.concat([pd.read_csv(path) for path in model_files], ignore_index=True)
+    summary = ensemble.groupby(["target", "window"], sort=False).agg(
+        model_count=("model", "nunique"),
+        mean_outward_cm=("error_outward_cm", "mean"),
+        std_outward_cm=("error_outward_cm", "std"),
+        fraction_outward=("error_outward_cm", lambda values: (values > 0).mean()),
+        mean_forward_cm=("error_forward_cm", "mean"),
+        std_forward_cm=("error_forward_cm", "std"),
+        fraction_forward=("error_forward_cm", lambda values: (values > 0).mean()),
+        mean_physical_l2_cm=("physical_l2_cm", "mean"),
+        maximum_ik_error_cm=("requested_achieved_l2_cm", "max"),
+    ).reset_index()
+    summary.to_csv(OUTPUT_DIR / "pilot_valid_seed_ensemble_summary.csv", index=False)
     print(result[["target", "window", "error_outward_cm", "error_forward_cm",
                   "physical_l2_cm", "requested_achieved_l2_cm"]].to_string(index=False))
-    print(f"Saved {OUTPUT_CSV}")
+    print(f"Saved {output_csv}")
 
 
 if __name__ == "__main__":
