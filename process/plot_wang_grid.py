@@ -125,9 +125,11 @@ def paper_convention_maps(data, start):
     ax.scatter(*start, marker="o", s=115, facecolor="none",
                edgecolor=CORAL, linewidth=2.0, zorder=5)
     ax.scatter(*start, marker="+", s=60, color=CORAL, linewidth=1.7, zorder=5)
-    ax.set_xlim(-7.0, 7.0)
+    # Keep every reversed arrowhead visible; the largest inferred matching
+    # displacement extends to -7.74 cm.
+    ax.set_xlim(-8.2, 7.0)
     ax.set_ylim(29.5, 37.5)
-    ax.set_xticks(np.arange(-7, 7.1, 1))
+    ax.set_xticks(np.arange(-8, 7.1, 1))
     ax.set_yticks(np.arange(30, 37.1, 1))
     ax.set_xlabel("Rightward position relative to C7 (cm)")
     ax.set_ylabel("Forward position relative to C7 (cm)")
@@ -176,10 +178,6 @@ def paper_convention_maps(data, start):
     context.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.16),
                    fontsize=7.5, frameon=True, framealpha=0.96,
                    edgecolor="#cccccc")
-    ax.text(0.99, 0.015,
-            "Reversed decoder error; uniform grid scale = 0.25",
-            transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
-            color="#555555")
     fig.tight_layout()
     fig.savefig(PAPER_PNG, dpi=300, bbox_inches="tight", facecolor="white")
     fig.savefig(PAPER_SVG, bbox_inches="tight", facecolor="white")
