@@ -102,40 +102,34 @@ def compact_direction_map(data):
 
 
 def paper_convention_maps(data, start):
-    """Plot target-to-implied-matched-hand vectors, as in Wang Figure 3."""
-    # If decoded perception = physical hand + e, a hand matching a visual target
-    # is implied to lie at target - e. This reverses the decoder-error vectors.
-    matched_right = 2 * data["actual_right_cm"] - data["decoded_right_cm"]
-    matched_forward = 2 * data["actual_forward_cm"] - data["decoded_forward_cm"]
+    """Plot decoded-perception-to-actual-hand vectors, as requested."""
 
     fig, (ax, context) = plt.subplots(
         1, 2, figsize=(12.0, 7.2),
         gridspec_kw={"width_ratios": [4.8, 1.5], "wspace": 0.16},
     )
-    for target_x, target_y, hand_x, hand_y in zip(
-            data.actual_right_cm, data.actual_forward_cm,
-            matched_right, matched_forward):
+    for predicted_x, predicted_y, actual_x, actual_y in zip(
+            data.decoded_right_cm, data.decoded_forward_cm,
+            data.actual_right_cm, data.actual_forward_cm):
         ax.annotate(
-            "", xy=(hand_x, hand_y), xytext=(target_x, target_y),
+            "", xy=(actual_x, actual_y), xytext=(predicted_x, predicted_y),
             arrowprops=dict(arrowstyle="-|>", color=PURPLE, lw=1.15,
                             mutation_scale=8), zorder=3,
         )
-    ax.scatter(data.actual_right_cm, data.actual_forward_cm, s=9,
+    ax.scatter(data.decoded_right_cm, data.decoded_forward_cm, s=9,
                color=PURPLE, zorder=4)
     ax.scatter(*start, marker="o", s=115, facecolor="none",
                edgecolor=CORAL, linewidth=2.0, zorder=5)
     ax.scatter(*start, marker="+", s=60, color=CORAL, linewidth=1.7, zorder=5)
-    # Keep every reversed arrowhead visible; the largest inferred matching
-    # displacement extends to -7.74 cm.
-    ax.set_xlim(-8.2, 7.0)
+    ax.set_xlim(-7.0, 7.0)
     ax.set_ylim(29.5, 37.5)
-    ax.set_xticks(np.arange(-8, 7.1, 1))
+    ax.set_xticks(np.arange(-7, 7.1, 1))
     ax.set_yticks(np.arange(30, 37.1, 1))
     ax.set_xlabel("Rightward position relative to C7 (cm)")
     ax.set_ylabel("Forward position relative to C7 (cm)")
     ax.set_title(
         "Wang Figure 3 convention - full 100-target model grid\n"
-        "Visual target -> implied physically matched hand",
+        "Decoded proprioceptive location -> actual IK-achieved hand location",
         fontsize=13, pad=10,
     )
     ax.grid(True, color="#e8e8e8", linewidth=0.65)
@@ -165,9 +159,9 @@ def paper_convention_maps(data, start):
     context.grid(True, color="#eeeeee", linewidth=0.6)
     handles = [
         Line2D([0], [0], color=PURPLE, lw=1.4, marker=">", markersize=6,
-               markevery=[1], label="Target -> implied matched hand"),
+               markevery=[1], label="Decoded perception -> actual hand"),
         Line2D([0], [0], marker="o", color=PURPLE, lw=0, markersize=4,
-               label="Visual target / achieved endpoint"),
+               label="Decoded proprioceptive location"),
         Line2D([0], [0], marker="o", markerfacecolor="none",
                markeredgecolor=CORAL, markeredgewidth=1.6, color="none",
                markersize=8, label="Achieved common reach start"),
@@ -210,7 +204,7 @@ def paper_convention_maps(data, start):
     ax.set_ylabel("Original Wang-grid forward coordinate (cm)")
     ax.set_title(
         "Wang Figure 3 convention - compact model direction map\n"
-        "Visual target -> implied physically matched hand; positions not to scale",
+        "Decoded proprioceptive location -> actual hand; positions not to scale",
         fontsize=13, pad=10,
     )
     ax.grid(True, color="#e8e8e8", linewidth=0.65)
@@ -222,15 +216,15 @@ def paper_convention_maps(data, start):
         spine.set_color(GRAY)
     handles = [
         Line2D([0], [0], color=PURPLE, lw=1.4, marker=">", markersize=6,
-               markevery=[1], label="Target -> implied matched hand"),
+               markevery=[1], label="Decoded perception -> actual hand"),
         Line2D([0], [0], marker="o", color=PURPLE, lw=0, markersize=4,
-               label="Target display position"),
+               label="Decoded-location display position"),
     ]
     ax.legend(handles=handles, loc="upper right", fontsize=8, frameon=True,
               framealpha=0.96, edgecolor="#cccccc")
     ax.text(
         0.995, 0.018,
-        "Wang convention = negative of decoded proprioceptive error\n"
+        "Tail = decoded perception; head = actual hand\n"
         "One isotropic gain: 0.55 display units per cm",
         transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
         color="#555555",
