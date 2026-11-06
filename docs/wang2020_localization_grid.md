@@ -105,12 +105,21 @@ verified independently. At minimum:
 
 - lock the declared wrist and forearm coordinates consistently;
 - use the same rest-posture regularization for every target;
+- replay every coordinate state used by IK when evaluating marker positions and
+  muscle geometry;
 - forward-kinematically reconstruct the `Handle` location;
 - enforce a strict Cartesian endpoint tolerance;
 - check joint limits, training-distribution bounds, and continuity;
 - cache the canonical endpoint solution so every repeat of a target ends in
   the same physical posture; and
 - save a body-centered requested-versus-achieved grid plot.
+
+Compute the primary decoded body-space position by applying this same OpenSim
+forward kinematics and fixed distal-coordinate state to the decoder's predicted
+shoulder/elbow angles. Save the network's raw XYZ output separately in its
+analytic training-label coordinate convention. Keep requested physical target,
+achieved physical `Handle`, decoded-joint physical `Handle`, true analytic XYZ,
+and decoded analytic XYZ as explicitly named quantities.
 
 Any failure stops the experiment instead of producing a distorted localization
 map.

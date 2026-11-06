@@ -46,6 +46,18 @@ The direct decoder error is
 decoder_error = predicted_position - actual_position
 ```
 
+The primary body-space position estimate will be obtained by passing the
+decoder's four predicted shoulder/elbow angles through the same locked-wrist
+OpenSim forward kinematics used to define the physical arm. The actual position
+will be the OpenSim `Handle` location from the corresponding true joint state.
+Thus both endpoints in the primary error vector use the same marker, arm
+geometry, body-centered transform, and distal-coordinate state.
+
+The network's directly predicted XYZ output will also be saved, but it will be
+analyzed separately in the analytic training-label coordinate convention in
+which that output was trained. It will not be substituted for the physical
+OpenSim `Handle` location or labeled as the achieved target position.
+
 For the right arm:
 
 - positive lateral error is rightward and outward;
@@ -117,11 +129,20 @@ The implementation must:
 - lock the declared wrist and forearm coordinates consistently;
 - use one fixed regularization policy for all targets;
 - solve and cache one canonical endpoint posture per target;
+- replay every coordinate state used by IK when evaluating physical marker
+  locations and muscle geometry;
 - forward-kinematically reconstruct the OpenSim `Handle` position;
 - compare requested and achieved positions frame by frame;
 - enforce a strict endpoint error threshold;
 - check joint limits, training-distribution bounds, and joint continuity; and
 - save a body-centered requested-versus-achieved target plot.
+
+For proprioceptive bias, transform both true and decoded joint states through
+the same OpenSim model and body-centered coordinate transform before taking
+their difference. Also save, with distinct column names, the requested target,
+achieved physical `Handle`, true analytic training-label XYZ, raw decoded XYZ,
+and decoded-joint OpenSim `Handle`. These representations must never share a
+generic `true_x` or `pred_x` label.
 
 If any target fails, the experiment stops before proprioceptive inference. This
 prevents biomechanical or IK distortion from being mislabeled as neural bias.
@@ -143,7 +164,9 @@ will have one row per model, target, and measurement window, including:
 
 - model coefficient seed and training seed;
 - target row and column;
-- body-centered actual and predicted XYZ;
+- requested and achieved body-centered physical `Handle` XYZ;
+- body-centered physical XYZ reconstructed from decoded joint angles;
+- true and decoded XYZ in the network's analytic training-label convention;
 - lateral, depth, and vertical decoder errors;
 - inward/outward error;
 - Euclidean error magnitude;
