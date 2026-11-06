@@ -4,6 +4,7 @@ from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
+matplotlib.rcParams["svg.hashsalt"] = "wang-pilot-v1"
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyBboxPatch
@@ -85,7 +86,10 @@ def main():
 
     # Common center-out origin. It coincides with the center target, so use an
     # open marker large enough to remain visible behind the target dot.
-    start_right, start_forward = 0.0, 33.455
+    # All trials share this same canonical achieved center posture. Use its
+    # physical Handle coordinate rather than the nominal requested target.
+    start_right = means.loc["center", "actual_right_cm"]
+    start_forward = means.loc["center", "actual_forward_cm"]
     ax.scatter(start_right, start_forward, marker="o", s=150,
                facecolor="none", edgecolor=CORAL, linewidth=2.0, zorder=3)
     ax.scatter(start_right, start_forward, marker="+", s=75,
@@ -118,7 +122,7 @@ def main():
                label="Achieved hand location"),
         Line2D([0], [0], marker="o", markerfacecolor="none",
                markeredgecolor=CORAL, markeredgewidth=1.8, color="none",
-               markersize=9, label="Common reach start"),
+               markersize=9, label="Achieved common reach start"),
         Line2D([0], [0], marker="o", markerfacecolor=TORSO,
                markeredgecolor=TORSO_EDGE, color="none", markersize=8,
                label="Torso (C7 at x = 0, y = 0)"),

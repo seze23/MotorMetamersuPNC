@@ -49,7 +49,9 @@ must not be numerically pooled.
 `pilot_figure3_style.png` is the Figure 3a-style pilot map. Pale arrows show
 individual matched models and the bold purple arrows show the across-model
 mean, always from achieved to decoded position. The plot includes anatomical
-centimeter ticks, a C7-centered torso cue, and the common center-out origin.
+centimeter ticks, a C7-centered torso cue, and the achieved common center-out
+origin. The achieved start is `(right=0.141, forward=33.482)` cm; the requested
+center was `(0.000, 33.455)` cm.
 The SVG copy is provided for lossless editing.
 
 Reproduce the pilot with:
