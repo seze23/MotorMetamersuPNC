@@ -1,0 +1,9 @@
+requested_right_cm,requested_forward_cm,maximum_endpoint_error_cm,accepted,reason
+-23.161,33.455,1.059033,false,exceeds_0.5_cm_gate
+-18.285,33.455,0.853159,false,exceeds_0.5_cm_gate
+-10.971,33.455,0.599503,false,exceeds_0.5_cm_gate
+-6.095,33.455,0.427409,true,passes_0.5_cm_gate
+0.000,22.671,0.250704,true,passes_0.5_cm_gate
+0.000,33.455,0.146393,true,passes_0.5_cm_gate
+0.000,44.239,0.451028,true,passes_0.5_cm_gate
+18.285,33.455,0.276626,true,passes_0.5_cm_gate

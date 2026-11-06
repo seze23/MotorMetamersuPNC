@@ -1,0 +1,3 @@
+source,subset,n_targets,mean_raw_dx_cm,mean_raw_dy_cm,fraction_negative_dx,fraction_negative_dy,arrow_tail,arrow_head
+main:dataexp/centerout/multi_seed_results_matched.csv,polar_grid_model_0_9,72,-0.6792389861,-0.3943409291,0.6944444444,0.875,predicted,true
+main:dataexp/centerout/multi_seed_results_matched.csv,polar_grid_valid_coefficient_seed_ensemble_point_means,72,-0.8611531007,-0.1717104504,1.0,0.7083333333,predicted,true
