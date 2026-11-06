@@ -77,6 +77,11 @@ numerically pooled; the comparison is qualitative and sign-based.
   an intentionally compressed display grid. Target locations are not spatially
   to scale; one isotropic arrow gain preserves the physical bias direction and
   relative magnitude.
+- `wang_grid_paper_convention.png` and `.svg`: body-coordinate map using Wang
+  Figure 3's target-to-physical-hand arrow convention. The implied matched-hand
+  displacement is the negative of decoded proprioceptive error.
+- `wang_grid_paper_convention_compact.png` and `.svg`: the same Wang convention
+  on the intentionally compressed display grid.
 
 The expensive stages are cached: IK and muscle lengths are generated once;
 spindle signals are generated once per coefficient seed and reused by its four
