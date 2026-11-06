@@ -6,6 +6,14 @@ seed: five coefficient seeds times four network training seeds.
 
 ## Geometry and coordinates
 
+Wang et al. explicitly report a 5-row by 20-column target matrix, with
+24.38 mm between adjacent columns and 53.92 mm between adjacent rows, in a
+48.76 cm by 26.96 cm workspace whose near edge was 20 cm in front of the
+participant. Figure 3 omits numeric axis ticks, so absolute coordinates cannot
+be read from the figure itself. The unscaled coordinates stored here are a
+centered reconstruction from the reported geometry, not coordinates published
+target by target.
+
 The original Wang rectangle did not pass the fixed 0.5 cm endpoint geometry
 gate for this right-arm setup. The complete rectangle was therefore uniformly
 scaled by 0.25 about `(right=0, forward=33.455)` cm, as required by the
@@ -65,6 +73,10 @@ numerically pooled; the comparison is qualitative and sign-based.
 - `behavior_old_model_comparison.csv`: concise regional, behavioral-sign, and
   old-model comparison.
 - `wang_grid_figure3_style.png` and `.svg`: Figure 3a-style full-grid map.
+- `wang_grid_compact_direction_map.png` and `.svg`: direction-focused view on
+  an intentionally compressed display grid. Target locations are not spatially
+  to scale; one isotropic arrow gain preserves the physical bias direction and
+  relative magnitude.
 
 The expensive stages are cached: IK and muscle lengths are generated once;
 spindle signals are generated once per coefficient seed and reused by its four

@@ -17,6 +17,8 @@ DATA_DIR = ROOT / "dataexp" / "wang_grid"
 SUMMARY = DATA_DIR / "ensemble_target_window_summary.csv"
 PNG = DATA_DIR / "wang_grid_figure3_style.png"
 SVG = DATA_DIR / "wang_grid_figure3_style.svg"
+COMPACT_PNG = DATA_DIR / "wang_grid_compact_direction_map.png"
+COMPACT_SVG = DATA_DIR / "wang_grid_compact_direction_map.svg"
 PURPLE = "#4b4fc4"
 CORAL = "#ef786f"
 GRAY = "#777777"
@@ -30,6 +32,69 @@ def torso(ax, alpha=1.0):
     ax.add_patch(Circle((0, 1), 3.2, facecolor="#eeeeee",
                         edgecolor=GRAY, linewidth=0.9, alpha=alpha))
     ax.scatter([0], [0], marker="x", color=GRAY, s=18, zorder=4)
+
+
+def compact_direction_map(data):
+    """Plot bias vectors on a compressed display grid without changing direction."""
+    column_spacing = 1.0
+    row_spacing = 2.2
+    vector_gain = 0.55  # display units per cm of physical localization bias
+    x = data["grid_column"].to_numpy() * column_spacing
+    y = data["grid_row"].to_numpy() * row_spacing
+    dx = data["mean_outward_cm"].to_numpy() * vector_gain
+    dy = data["mean_forward_cm"].to_numpy() * vector_gain
+
+    fig, ax = plt.subplots(figsize=(13.2, 7.4))
+    for x0, y0, du, dv in zip(x, y, dx, dy):
+        ax.annotate(
+            "", xy=(x0 + du, y0 + dv), xytext=(x0, y0),
+            arrowprops=dict(arrowstyle="-|>", color=PURPLE, lw=1.15,
+                            mutation_scale=8), zorder=3,
+        )
+    ax.scatter(x, y, s=10, color=PURPLE, zorder=4)
+
+    x_tick_columns = np.array([0, 4, 9, 14, 19])
+    x_lookup = data.groupby("grid_column")["unscaled_right_cm"].first()
+    y_lookup = data.groupby("grid_row")["unscaled_forward_cm"].first()
+    ax.set_xticks(x_tick_columns)
+    ax.set_xticklabels([f"{x_lookup.loc[col]:.3f}" for col in x_tick_columns])
+    ax.set_yticks(np.arange(5) * row_spacing)
+    ax.set_yticklabels([f"{y_lookup.loc[row]:.3f}" for row in range(5)])
+    ax.set_xlabel("Original Wang-grid rightward coordinate (cm; selected labels)")
+    ax.set_ylabel("Original Wang-grid forward coordinate (cm)")
+    ax.set_title(
+        "Full-grid proprioceptive bias directions\n"
+        "Compressed display grid; target positions are not spatially to scale",
+        fontsize=13, pad=10,
+    )
+    ax.grid(True, color="#e8e8e8", linewidth=0.65)
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlim(-0.65, 20.6)
+    ax.set_ylim(-0.65, 10.0)
+    ax.tick_params(direction="out", length=4, labelsize=8.5)
+    for spine in ax.spines.values():
+        spine.set_color(GRAY)
+
+    handles = [
+        Line2D([0], [0], color=PURPLE, lw=1.4, marker=">", markersize=6,
+               markevery=[1], label="20-model mean bias (direction preserved)"),
+        Line2D([0], [0], marker="o", color=PURPLE, lw=0, markersize=4,
+               label="Target display position"),
+    ]
+    ax.legend(handles=handles, loc="upper left", fontsize=8, frameon=True,
+              framealpha=0.96, edgecolor="#cccccc")
+    ax.text(
+        0.995, 0.018,
+        "Arrows use one isotropic gain: 0.55 display units per cm of bias\n"
+        "Tail = achieved target; head = decoded proprioceptive location",
+        transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
+        color="#555555",
+    )
+    fig.tight_layout()
+    fig.savefig(COMPACT_PNG, dpi=300, bbox_inches="tight", facecolor="white")
+    fig.savefig(COMPACT_SVG, bbox_inches="tight", facecolor="white")
+    plt.close(fig)
+    print(f"Saved {COMPACT_PNG}")
 
 
 def main():
@@ -120,6 +185,7 @@ def main():
     fig.savefig(SVG, bbox_inches="tight", facecolor="white")
     plt.close(fig)
     print(f"Saved {PNG}")
+    compact_direction_map(data)
 
 
 if __name__ == "__main__":
