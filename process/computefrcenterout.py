@@ -24,6 +24,9 @@ from paths import REPO_DIR, SPINDLES_DIR, FIGURES_DIR, EXPERIMENT_CONFIG
 
 PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
 SPINDLE_OPTIONS = EXPERIMENT_CONFIG.get("spindles", {})
+SAVE_DIAGNOSTIC_FIGURES = bool(
+    PROPRIOCEPTION_CONFIG.get("save_diagnostic_figures", True)
+)
 MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
 COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
 if MODEL_FAMILY not in {"main", "extended"}:
@@ -154,8 +157,12 @@ for direction, npz_path in npz_files:
         save_kwargs['elbow_xyz_world'] = elbow_xyz_world
     np.savez(out_npz, **save_kwargs)
     set_artifact(direction, "spindle_data", out_npz)
-    set_artifact(direction, "spindle_figure", out_png)
     print(f"  Saved {os.path.basename(out_npz)}")
+
+    if not SAVE_DIAGNOSTIC_FIGURES:
+        continue
+
+    set_artifact(direction, "spindle_figure", out_png)
 
     # --- Spindle firing rate figure: 2 rows x 3 muscles ---
     t_plot = times

@@ -33,6 +33,9 @@ from inference.test_model_utils_new import load_model, parse_config_value
 from train.new_spindle_dataset import SpindleDataset
 
 PROPRIOCEPTION_CONFIG = EXPERIMENT_CONFIG.get("proprioception", {})
+SAVE_DIAGNOSTIC_FIGURES = bool(
+    PROPRIOCEPTION_CONFIG.get("save_diagnostic_figures", True)
+)
 MODEL_FAMILY = str(PROPRIOCEPTION_CONFIG.get("model_family", "extended")).lower()
 COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("coefficient_seed", 0))
 MODEL_COEF_SEED = int(PROPRIOCEPTION_CONFIG.get("model_coefficient_seed", COEF_SEED))
@@ -211,6 +214,10 @@ for direction, sp_path in spindle_files:
     }).to_csv(os.path.join(PREDICTIONS_DIR, f"{direction}.csv"), index=False)
     set_artifact(direction, "predictions", os.path.join(PREDICTIONS_DIR, f"{direction}.csv"))
 
+    if not SAVE_DIAGNOSTIC_FIGURES:
+        print(f"  mean L2: {mean_l2:.2f} cm")
+        continue
+
     # Per-direction 7-panel time series
     plot_cols = [
         (true[:, 4], pred[:, 4], "Shoulder elevation (deg)", sh_elv_rmse),
@@ -262,6 +269,10 @@ for direction, sp_path in spindle_files:
     print(f"  elbow RMSE: {elbow_rmse:.2f}°  wrist RMSE: {wrist_rmse:.2f} cm  "
           f"mean L2: {mean_l2:.2f} cm")
     print()
+
+if not SAVE_DIAGNOSTIC_FIGURES:
+    print("Inference complete; diagnostic figures disabled by configuration.")
+    sys.exit(0)
 
 # ============================================================
 # PANEL B: side-by-side XY plane, reach phase only, centered

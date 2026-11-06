@@ -220,11 +220,26 @@ for trajectory in trajectories:
     xyz_world, times = validate_path_artifact(xyz_path)
     n_total = len(times)
 
+    # Long holds and returns contain many exact copies of targets already
+    # solved earlier in the same trajectory. Solve each exact Cartesian target
+    # once, then expand its canonical posture back onto the full timebase.
+    solve_indices = []
+    seen_targets = set()
+    for frame_index, target in enumerate(xyz_world):
+        key = np.asarray(target, dtype=np.float32).tobytes()
+        if key not in seen_targets:
+            seen_targets.add(key)
+            solve_indices.append(frame_index)
+    solve_indices = np.asarray(solve_indices, dtype=int)
+    solve_xyz_world = xyz_world[solve_indices]
+    solve_times = times[solve_indices]
+    n_solve = len(solve_indices)
+
     # Convert world frame (shoulder-centered, cm) -> OpenSim ground (meters, absolute)
     # world_pos is shoulder-centered, so add shoulder_osim after rotating
-    handle_xyz_osim = np.zeros((n_total, 3))
-    for i in range(n_total):
-        world_cm   = xyz_world[i]              # (3,) shoulder-centered, cm
+    handle_xyz_osim = np.zeros((n_solve, 3))
+    for i in range(n_solve):
+        world_cm   = solve_xyz_world[i]        # (3,) shoulder-centered, cm
         osim_rel   = W2S @ world_cm / 100.0   # (3,) OpenSim relative, meters
         handle_xyz_osim[i] = osim_rel + shoulder_osim  # absolute OpenSim
 
@@ -234,13 +249,13 @@ for trajectory in trajectories:
     print(f"  Handle at rest: target={rest_osim} actual={handle_osim} err={err*100:.2f}cm")
 
     # Write .trc file
-    write_trc(trc_path, times, handle_xyz_osim)
+    write_trc(trc_path, solve_times, handle_xyz_osim)
 
     # Configure and run IK tool
     ik_tool = osm.InverseKinematicsTool()
     ik_tool.setModel(model)
-    ik_tool.setStartTime(float(times[0]))
-    ik_tool.setEndTime(float(times[-1]))
+    ik_tool.setStartTime(float(solve_times[0]))
+    ik_tool.setEndTime(float(solve_times[-1]))
     ik_tool.setMarkerDataFileName(trc_path)
     ik_tool.setOutputMotionFileName(mot_path)
     ik_tool.set_report_errors(False)
@@ -267,15 +282,16 @@ for trajectory in trajectories:
     seconds_per_frame, sample_count = load_seconds_per_frame()
     print(
         "  Running OpenSim IK... "
-        f"Loose estimate: {n_total * seconds_per_frame / 60:.1f} min "
+        f"{n_solve}/{n_total} unique targets. Loose estimate: "
+        f"{n_solve * seconds_per_frame / 60:.1f} min "
         f"({sample_count} prior run(s) used)"
         if sample_count else
         "  Running OpenSim IK... Loose estimate: "
-        f"{n_total * seconds_per_frame / 60:.1f} min (bootstrap default; no history yet)"
+        f"{n_solve * seconds_per_frame / 60:.1f} min (bootstrap default; no history yet)"
     )
-    with LooseIKProgress(n_total, name) as progress:
+    with LooseIKProgress(n_solve, name) as progress:
         ik_tool.run()
-    save_seconds_per_frame(progress.elapsed / n_total)
+    save_seconds_per_frame(progress.elapsed / n_solve)
     print(
         f"  Actual IK time: {progress.elapsed / 60:.1f} min; "
         "saved to improve the next loose estimate."
@@ -291,7 +307,7 @@ for trajectory in trajectories:
     print(f"  Rows: {len(df)}")
 
     # Extract joint angles for the 4 driven coordinates + store all 7
-    joint_angles = np.zeros((n_total, 7), dtype=np.float32)
+    solved_joint_angles = np.zeros((n_solve, 7), dtype=np.float32)
     for j, cname in enumerate(COORD_NAMES):
         if cname in df.columns:
             vals = df[cname].to_numpy()
@@ -299,19 +315,21 @@ for trajectory in trajectories:
             # Check magnitude to determine
             if np.abs(vals).max() < 10:  # radians
                 vals = np.degrees(vals)
-            joint_angles[:len(vals), j] = vals[:n_total]
+            solved_joint_angles[:len(vals), j] = vals[:n_solve]
 
     # The iterative IK solver can drift by tiny amounts while solving repeated
     # copies of an identical hand target. Use one deterministic joint solution
     # for every exact repeated target so stationary holds stay stationary and
     # downstream pose caching remains effective.
-    solution_by_target = {}
-    for frame_index, target in enumerate(xyz_world):
-        key = np.asarray(target, dtype=np.float32).tobytes()
-        if key in solution_by_target:
-            joint_angles[frame_index] = solution_by_target[key]
-        else:
-            solution_by_target[key] = joint_angles[frame_index].copy()
+    solution_by_target = {
+        np.asarray(xyz_world[frame_index], dtype=np.float32).tobytes():
+            solved_joint_angles[solution_index].copy()
+        for solution_index, frame_index in enumerate(solve_indices)
+    }
+    joint_angles = np.stack([
+        solution_by_target[np.asarray(target, dtype=np.float32).tobytes()]
+        for target in xyz_world
+    ])
 
     # Sanity check
     print(f"  Joint angle ranges:")
