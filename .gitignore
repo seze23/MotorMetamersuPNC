@@ -17,9 +17,16 @@ data.zip
 trained_models.zip
 __pycache__/
 *.pyc
+.DS_Store
 opensim.log
 .ipynb_checkpoints/
+tmp/
+scratch/
 third_party/
 .venv-mujoco/
 .venv-opensim/
 outputs_mujoco/
+local_artifacts/
+# Generated experiment results are local artifacts. Historical files already
+# tracked under dataexp remain tracked; new results stay out of commits.
+dataexp/*
