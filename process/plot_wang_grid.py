@@ -1,6 +1,7 @@
 """Create a Figure 3a-style map from the complete 20-model grid."""
 
 from pathlib import Path
+import os
 
 import matplotlib
 matplotlib.use("Agg")
@@ -10,10 +11,13 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyBboxPatch, Rectangle
 import numpy as np
 import pandas as pd
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_DIR = ROOT / "dataexp" / "wang_grid"
+RESULTS_NAME = os.environ.get("MOTOR_META_RESULTS_NAME", "wang_grid")
+READOUT_LABEL = os.environ.get("MOTOR_META_FIGURE_READOUT", "physical FK")
+DATA_DIR = ROOT / "dataexp" / RESULTS_NAME
 SUMMARY = DATA_DIR / "ensemble_target_window_summary.csv"
 PNG = DATA_DIR / "wang_grid_figure3_style.png"
 SVG = DATA_DIR / "wang_grid_figure3_style.svg"
@@ -67,7 +71,7 @@ def compact_direction_map(data):
     ax.set_xlabel("Original Wang-grid rightward coordinate (cm; selected labels)")
     ax.set_ylabel("Original Wang-grid forward coordinate (cm)")
     ax.set_title(
-        "Full-grid proprioceptive bias directions\n"
+        f"Full-grid proprioceptive bias directions ({READOUT_LABEL})\n"
         "Compressed display grid; target positions are not spatially to scale",
         fontsize=13, pad=10,
     )
@@ -128,7 +132,7 @@ def paper_convention_maps(data, start):
     ax.set_xlabel("Rightward position relative to C7 (cm)")
     ax.set_ylabel("Forward position relative to C7 (cm)")
     ax.set_title(
-        "Wang Figure 3 convention - full 100-target model grid\n"
+        f"Wang Figure 3 convention - full 100-target model grid ({READOUT_LABEL})\n"
         "Decoded proprioceptive location -> actual IK-achieved hand location",
         fontsize=13, pad=10,
     )
@@ -203,7 +207,7 @@ def paper_convention_maps(data, start):
     ax.set_xlabel("Original Wang-grid rightward coordinate (cm; selected labels)")
     ax.set_ylabel("Original Wang-grid forward coordinate (cm)")
     ax.set_title(
-        "Wang Figure 3 convention - compact model direction map\n"
+        f"Wang Figure 3 convention - compact model direction map ({READOUT_LABEL})\n"
         "Decoded proprioceptive location -> actual hand; positions not to scale",
         fontsize=13, pad=10,
     )
@@ -243,9 +247,13 @@ def main():
         raise ValueError("Figure requires 100 targets and 20 models")
 
     first_muscle = np.load(
-        ROOT / "outputs" / "wang_grid" / "muscles" / "r00_c00.npz"
+        ROOT / "outputs" / RESULTS_NAME / "muscles" / "r00_c00.npz"
     )
     start = first_muscle["wrist_xyz_body"][0, :2]
+    config_path = ROOT / "experiments" / f"{RESULTS_NAME}.yaml"
+    grid_scale = 1.0
+    if config_path.exists():
+        grid_scale = float(yaml.safe_load(config_path.read_text(encoding="utf-8"))["path"]["uniform_grid_scale"])
 
     fig, (ax, context) = plt.subplots(
         1, 2, figsize=(12.0, 7.2),
@@ -264,14 +272,14 @@ def main():
                edgecolor=CORAL, linewidth=2.0, zorder=5)
     ax.scatter(*start, marker="+", s=60, color=CORAL, linewidth=1.7, zorder=5)
 
-    ax.set_xlim(-7.0, 7.0)
-    ax.set_ylim(29.5, 37.5)
-    ax.set_xticks(np.arange(-7, 7.1, 1))
-    ax.set_yticks(np.arange(30, 37.1, 1))
+    all_x = np.r_[data.actual_right_cm, data.decoded_right_cm, start[0]]
+    all_y = np.r_[data.actual_forward_cm, data.decoded_forward_cm, start[1]]
+    ax.set_xlim(all_x.min() - 2.0, all_x.max() + 2.0)
+    ax.set_ylim(all_y.min() - 2.0, all_y.max() + 2.0)
     ax.set_xlabel("Rightward position relative to C7 (cm)")
     ax.set_ylabel("Forward position relative to C7 (cm)")
     ax.set_title(
-        "Right-hand proprioceptive localization - full 100-target grid\n"
+        f"Right-hand proprioceptive localization - full 100-target grid ({READOUT_LABEL})\n"
         "Achieved -> decoded position; late hold; mean of 20 matched models",
         fontsize=13, pad=10,
     )
@@ -290,7 +298,9 @@ def main():
         data.actual_forward_cm.max() - data.actual_forward_cm.min(),
         facecolor=PURPLE, edgecolor=PURPLE, alpha=0.18,
     ))
-    context.set_xlim(-19, 19); context.set_ylim(-5, 39)
+    context.set_xlim(min(-19, data.actual_right_cm.min() - 2),
+                     max(19, data.actual_right_cm.max() + 2))
+    context.set_ylim(-5, max(39, data.actual_forward_cm.max() + 2))
     context.set_xticks([-15, 0, 15]); context.set_yticks([0, 15, 30])
     context.tick_params(labelsize=7, length=3)
     context.set_title("Body context", fontsize=10)
@@ -308,7 +318,7 @@ def main():
                markeredgecolor=CORAL, markeredgewidth=1.6, color="none",
                markersize=8, label="Achieved common reach start"),
         Line2D([0], [0], marker="s", color=PURPLE, alpha=0.2, lw=0,
-               markersize=8, label="Scaled target workspace"),
+               markersize=8, label="Target workspace"),
         Line2D([0], [0], marker="o", markerfacecolor="#d8d8d8",
                markeredgecolor=GRAY, color="none", markersize=7,
                label="Torso (C7 at 0, 0)"),
@@ -316,7 +326,7 @@ def main():
     context.legend(handles=handles, loc="upper center", bbox_to_anchor=(0.5, -0.16),
                    fontsize=7.5, frameon=True, framealpha=0.96,
                    edgecolor="#cccccc")
-    ax.text(0.99, 0.015, "Uniform grid scale = 0.25",
+    ax.text(0.99, 0.015, f"Uniform Wang-grid scale = {grid_scale:.2f}",
             transform=ax.transAxes, ha="right", va="bottom", fontsize=8,
             color="#555555")
     fig.tight_layout()

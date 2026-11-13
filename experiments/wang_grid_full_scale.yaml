@@ -1,0 +1,35 @@
+experiment: wang_grid_full_scale
+musculoskeletal_model: opensim
+display_simulation: false
+
+ik:
+  backend: opensim
+  lock_wrist: true
+  locked_wrist_degrees: {pro_sup: 0.0, deviation: 0.0, flexion: 0.0}
+  # Preserve enough rest-posture preference to prevent branch jumping while
+  # weighting endpoint accuracy 100x more strongly than the original grid.
+  marker_weight: 1000000.0
+  coordinate_regularization_weight: 0.001
+
+proprioception:
+  model_family: extended
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  coefficient_seed: 0
+  training_seed: 9
+  temporal_padding_mode: replicate
+  save_diagnostic_figures: false
+
+muscle_lengths:
+  drive_distal_coordinates: true
+  tmin_route: reordered_all_wraps
+
+path:
+  generator: process/generate_paths/generate_wang_grid.py
+  sample_rate_hz: 240
+  uniform_grid_scale: 1.0
+  endpoint_tolerance_cm: 0.5
+  # The full Wang rectangle reaches 25.55 cm from its center. This is a
+  # protocol limit, not an IK constraint; use a margin while auditing it.
+  max_displacement_cm: 26.0
+  rest_pose_degrees: {elv_angle: 20.0, shoulder_elv: 40.0, shoulder_rot: 25.0, elbow_flexion: 85.0}
+  timing_seconds: {hold_before: 1.65, reach: 0.50, hold_target: 1.25}

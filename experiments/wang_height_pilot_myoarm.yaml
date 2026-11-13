@@ -1,0 +1,42 @@
+experiment: wang_height_pilot_myoarm
+musculoskeletal_model: myosuite_corrected
+display_simulation: false
+
+ik:
+  lock_wrist: true
+  locked_wrist_degrees:
+    pro_sup: 0.0
+    deviation: 0.0
+    flexion: 0.0
+  mujoco:
+    iterations: 40
+    damping: 0.001
+    nullspace_gain: 0.02
+    max_step_rad: 0.15
+    tolerance_m: 0.0005
+
+proprioception:
+  model_family: extended
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  coefficient_seed: 0
+  training_seed: 9
+  temporal_padding_mode: replicate
+  save_diagnostic_figures: true
+
+muscle_lengths:
+  align_opensim_rest: true
+
+path:
+  generator: process/generate_paths/generate_wang_height_pilot.py
+  sample_rate_hz: 240
+  max_displacement_cm: 65.0
+  endpoint_tolerance_cm: 0.5
+  rest_pose_degrees:
+    elv_angle: 20.0
+    shoulder_elv: 40.0
+    shoulder_rot: 25.0
+    elbow_flexion: 85.0
+  timing_seconds:
+    hold_before: 1.65
+    reach: 0.50
+    hold_target: 1.25
