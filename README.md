@@ -409,3 +409,60 @@ coefficients and retraining the CNN.
    training distribution.
 7. Only reuse a checkpoint after validating muscle ordering, normalization,
    temporal shape, and output-label semantics.
+
+## Viviani ellipse test: smaller paths, one configured CNN
+
+`notebooks/viviani_kinesthetic_shape_comparison.ipynb` now uses the original
+OpenSim pipeline and the **single checkpoint selected in the codebase**,
+`spatiotemporal_4_8-8-32-64_7171_0_9`. No ensemble or retraining is used.
+
+The active configuration is `experiments/viviani_aligned.yaml`: 32 cm perimeter,
+2.5 s period, seven eccentricities and three velocity profiles (21 stimuli).
+Slowing remains at the left/right extremes in B and top/bottom in C. Absolute
+speeds are one fifth of those in the 160 cm stimulus at the same period.
+
+Paths are centered at shoulder height in a plane 45 cm anterior to the model's
+torso reference (an approximation to the study's chest reference). The hand
+starts at participant-left and moves counterclockwise; plots explicitly use
+participant-right = negative pipeline X. IK and extraction
+both use neutral forearm rotation, matching the extractor's training convention.
+The native OpenSim IK backend is retained, with the original posture regularization .001.
+The notebook checks hand error, fibre lengths and velocities before inference.
+
+The baseline test, the first failed large-path muscle route, the corrected
+smaller-path route, spindle signals, and actual single-CNN comparisons are
+shown in the notebook. Outputs are under `outputs/viviani_aligned/`. The earlier
+full-size ensemble run is retained as an archived diagnostic, not the active
+experiment.
+
+The compatible published weights are in `trained_models.zip` at
+https://zenodo.org/records/15111808. Extract `trained_models/` at the repository
+root. The notebook uses separate OpenSim and PyTorch interpreters to avoid
+conflicting OpenMP runtimes. This is a scaled exploratory comparison with the
+human study, rather than an exact replication.
+
+Human PSE error bars are 95% t confidence intervals computed from the 20
+participant means in Table 1. CNN PSE bars show the tested eccentricity bracket
+containing the observed zero crossing, not statistical confidence. Additional
+plots report mean hand-position error ± SD across final-cycle phases and 3D
+reconstruction RMSE. The data transcription is retained under `notebooks/data/`.
+
+## Circles across workspace positions
+
+Section 6 of `notebooks/viviani_kinesthetic_shape_comparison.ipynb` runs vertical
+circles at 100 right/forward positions relative to C7. The grid CSV under
+`notebooks/data/` is an explicitly approximate 20-by-5 reconstruction from the
+supplied image; the original numeric coordinates were unavailable. Every trial
+holds at the same initial hand position, reaches to the circle's left edge,
+and traces the same 32 cm perimeter circle counterclockwise. Only the third
+full cycle is classified; a continued-motion buffer protects it from sequence
+end effects.
+
+`experiments/circle_positions.yaml` uses the existing single CNN checkpoint.
+`process/run_circle_position_batch.py` isolates biomechanical batches by row,
+validates all inputs and the common achieved start, then calls the original
+inference stage. Outputs are under `outputs/circle_position_grid/`. The new
+maps include extent-based labels, raw decoded loops, ellipse-fit ratios and
+residuals, centroid bias and reconstruction error. An extent-based circle label
+can conceal tilt or an irregular loop; the raw overlays and fit residuals must
+be inspected alongside it.

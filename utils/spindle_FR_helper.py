@@ -6,7 +6,6 @@ import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import torch
 
 from utils.muscle_names import MUSCLE_NAMES
 from utils.plot_defaults import DEFAULT_COLORS
@@ -241,6 +240,10 @@ def generate_vib_config(
     Raises:
         AssertionError: If `rand_max` is not provided and coefficient paths are missing.
     """
+    # Baseline spindle generation uses NumPy only. Load PyTorch only for
+    # vibration tensors to avoid loading two OpenMP runtimes in OpenSim jobs.
+    import torch
+
     muscle_indices = [MUSCLE_NAMES.index(muscle) for muscle in muscles_to_vib]
     num_channels, num_muscles, time = input_shape
 

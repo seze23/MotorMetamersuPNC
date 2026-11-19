@@ -154,6 +154,9 @@ for direction, sp_path in spindle_files:
     predictions, _ = tester.get_predictions()
     pred = predictions[0].cpu().detach().numpy()  # (1152,7)
     true = labels[0]                               # (1152,7)
+    raw_prediction_path = os.path.join(PREDICTIONS_DIR, f"{direction}_raw.npz")
+    np.savez_compressed(raw_prediction_path, predictions=pred, times=t)
+    set_artifact(direction, "raw_predictions", raw_prediction_path)
     os.remove(tmp_hdf5)
 
     # Metrics

@@ -1,0 +1,59 @@
+experiment: circle_position_grid
+display_simulation: false
+visualization:
+  playback_speed: 1.0
+  max_fps: 60
+  ground_height_m: -1.0
+ik:
+  backend: opensim
+  lock_wrist: true
+  locked_wrist_degrees:
+    pro_sup: 0.0
+    deviation: 0.0
+    flexion: 0.0
+  coordinate_regularization_weight: 0.0003
+  nimble:
+    wsl_distribution: Ubuntu
+    python: /home/braydenk/.venvs/motor-meta-nimble/bin/python
+    iterations: 12
+    damping: 1.0e-05
+    joint_limit_margin_degrees: 0.5
+    max_latent_step: 1.0
+    nullspace_gain: 0.005
+proprioception:
+  model_family: extended
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  coefficient_seed: 0
+  training_seed: 9
+  temporal_padding_mode: replicate
+muscle_lengths:
+  drive_distal_coordinates: false
+path:
+  generator: process/generate_paths/circle_positions.py
+  sample_rate_hz: 240
+  reach_cm: 10.0
+  max_displacement_cm: 25
+  rest_pose_degrees:
+    elv_angle: 51.3894157409668
+    shoulder_elv: 61.86560821533203
+    shoulder_rot: 40.13718795776367
+    elbow_flexion: 104.0528564453125
+  timing_seconds:
+    hold_before: 1.65
+    reach: 0.5
+    hold_target: 0.5
+    return: 0.5
+    hold_after: 1.65
+  circle_positions:
+    grid_csv: notebooks/data/circle_position_grid.csv
+    radius_cm: 5.092958178940651
+    period_s: 2.5
+    cycles: 3
+    hold_start_s: 0.5
+    reach_s: 1.0
+    settle_s: 0.5
+    buffer_s: 0.25
+    height_from_shoulder_cm: 0.0
+    common_start_right_forward_cm:
+    - 0.15
+    - 33.48

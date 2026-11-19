@@ -14,6 +14,11 @@ import opensim as osm
 from experiment import load_manifest, resolve_artifact, set_artifact
 from paths import EXPERIMENT_CONFIG, MODEL_PATH, MUSCLES_DIR
 
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from utils.opensim_pose import CoupledPose
+
 MUSCLE_NAMES = [
     'CORB', 'DELT1', 'DELT2', 'DELT3', 'INFSP',
     'LAT1', 'LAT2', 'LAT3', 'PECM1', 'PECM2',
@@ -53,6 +58,20 @@ def process_motion(trajectory_id, mot_path):
     muscle_set = model.getMuscles()
     marker_set = model.getMarkerSet()
 
+    # Desired paths use a fixed shoulder origin at the configured rest pose.
+    # Keep this reference in addition to the instantaneous shoulder frame.
+    reference_pose = dict(EXPERIMENT_CONFIG['path']['rest_pose_degrees'])
+    reference_pose.update(EXPERIMENT_CONFIG.get('ik', {}).get('locked_wrist_degrees', {}))
+    pose = CoupledPose(model, MODEL_PATH)
+    pose.set_radians(state, {name: np.radians(degrees) for name, degrees in reference_pose.items()})
+    model.realizePosition(state)
+    reference_origin = _vec3_to_numpy(marker_set.get(SHOULDER_MARKER).getLocationInGround(state))
+    # Preserve the legacy four-coordinate extraction mode: un-driven distal
+    # coordinates stay at the original model defaults, rather than the brace.
+    pose.set_radians(state, {
+        name: coord_set.get(name).getDefaultValue() for name in COORD_LABEL_ORDER
+    })
+
     coordinates = [coord_set.get(name) for name in COORD_ORDER]
     muscles = [muscle_set.get(name) for name in MUSCLE_NAMES]
     markers = [marker_set.get(name) for name in
@@ -84,8 +103,7 @@ def process_motion(trajectory_id, mot_path):
         key = values.tobytes()
         cached = pose_cache.get(key)
         if cached is None:
-            for coordinate, value in zip(coordinates, values):
-                coordinate.setValue(state, value)
+            pose.set_radians(state, dict(zip(COORD_ORDER, values)))
             model.equilibrateMuscles(state)
             cached = (
                 np.array([muscle.getFiberLength(state) * 1000
@@ -110,6 +128,8 @@ def process_motion(trajectory_id, mot_path):
         fiber_lengths=fiber_lengths,
         joint_angles=joint_angles,
         wrist_xyz_world=wrist_centered,
+        wrist_xyz_reference_world=(S2W @ (wrist_xyz - reference_origin).T).T * 100,
+        reference_origin_ground_m=reference_origin,
         elbow_xyz_world=elbow_centered,
         coord_names=np.array(COORD_LABEL_ORDER),
         muscle_names=np.array(MUSCLE_NAMES),

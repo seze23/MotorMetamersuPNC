@@ -73,8 +73,8 @@ class Pipeline:
 
     def _ik_backend(self):
         backend = str(self.config.get("ik", {}).get("backend", "opensim")).lower()
-        if backend not in {"opensim", "nimble"}:
-            raise ValueError("ik.backend must be either 'opensim' or 'nimble'")
+        if backend not in {"opensim", "nimble", "opensim_scipy"}:
+            raise ValueError("ik.backend must be 'opensim', 'nimble', or 'opensim_scipy'")
         return backend
 
     @staticmethod
@@ -107,6 +107,8 @@ class Pipeline:
             print("\n=== inverse-kinematics: Nimble Physics (WSL) ===", flush=True)
             return subprocess.run(self._nimble_command(), cwd=ROOT, check=True)
         script = self._script_for(stage)
+        if stage == "inverse-kinematics" and self._ik_backend() == "opensim_scipy":
+            script = SCRIPT_DIR / "scipy_opensim_ik.py"
         print(f"\n=== {stage}: {script} ===", flush=True)
         return subprocess.run(
             [sys.executable, str(script)], cwd=ROOT,
