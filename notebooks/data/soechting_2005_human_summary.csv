@@ -1,0 +1,7 @@
+study_experiment,condition,mean_alpha,mean_source,beta,difference_threshold_2beta,beta_ci_low,beta_ci_high
+1,N,0.021,derived_from_rounded_pooled_and_experiment2_means,0.077,0.154,,
+1,FS,0.026,derived_from_rounded_pooled_and_experiment2_means,0.054,0.108,,
+1,FT,0.026,derived_from_rounded_pooled_and_experiment2_means,0.029,0.058,,
+2,N,-0.019,explicitly_reported_page417,0.040,0.080,0.028,0.062
+2,FS,0.030,explicitly_reported_page417,0.113,0.226,0.076,0.160
+2,FT,-0.002,explicitly_reported_page417,0.061,0.122,,

@@ -1,0 +1,77 @@
+experiment: soechting_2005
+display_simulation: false
+ik:
+  backend: opensim
+  lock_wrist: true
+  locked_wrist_degrees:
+    pro_sup: 0.0
+    deviation: 0.0
+    flexion: 0.0
+  coordinate_regularization_weight: 0.001
+muscle_lengths:
+  drive_distal_coordinates: false
+proprioception:
+  model_family: extended
+  model_path: trained_models/experiment_causal_flag-pcr_optimized_linear_extended_5_5_letter_reconstruction_joints/spatiotemporal_4_8-8-32-64_7171_0_9
+  coefficient_seed: 0
+  training_seed: 9
+  temporal_padding_mode: replicate
+path:
+  generator: process/generate_paths/soechting_horizontal.py
+  sample_rate_hz: 240
+  max_displacement_cm: 60
+  rest_pose_degrees:
+    elv_angle: 20.0
+    shoulder_elv: 40.0
+    shoulder_rot: -60.0
+    elbow_flexion: 85.0
+  horizontal_ellipses:
+    radius_cm: 15.0
+    alphas:
+    - -0.25
+    - -0.1
+    - 0.0
+    - 0.1
+    - 0.25
+    - 0.5
+    - 0.75
+    - 1.0
+    experiments:
+    - 1
+    - 2
+    conditions:
+    - N
+    - FS
+    - FT
+    placement: assumed_shoulder_relative_center
+    buffer_s: 0.25
+    ik_phase_knots: 128
+    tracking_tolerance_cm: 0.2
+    normalized_fiber_limits:
+    - 0.1
+    - 3.0
+    fiber_velocity_screen_mm_s: 500.0
+    center_world_cm:
+    - 0.0
+    - -35.0
+    - -30.0
+    minimum_shoulder_elevation_deg: 10.0
+    ik_warmup_loops: 0
+    attempted_alphas:
+    - -1.0
+    - -0.75
+    - -0.5
+    - -0.25
+    - -0.1
+    - 0.0
+    - 0.1
+    - 0.25
+    - 0.5
+    - 0.75
+    - 1.0
+    excluded_alphas:
+    - -1.0
+    - -0.75
+    - -0.5
+    exclusion_reason: Abrupt fiber-length routing jumps above 18000 mm/s despite accurate
+      marker tracking; excluded before CNN inference.

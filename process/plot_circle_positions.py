@@ -63,12 +63,12 @@ def main():
     fig.suptitle('Actual and decoded vertical circles at all 100 positions',fontsize=16,y=.995);fig.legend(handles=handles,loc='upper center',bbox_to_anchor=(.5,.96),ncol=4,frameon=False)
     fig.text(.05,.015,'Paths are centered separately to show shape. Same cm scale in every panel. R = right from C7; F = forward from C7. Colors use the earlier extent-based readout.',fontsize=10)
     fig.subplots_adjust(left=.04,right=.995,bottom=.055,top=.88,wspace=.06,hspace=.12);fig.savefig(figs/'circle_position_mosaic.png',dpi=150,bbox_inches='tight');plt.close(fig)
-    # Predicted centers are arrow tails;
-    # actual achieved locations are arrowheads. Coordinates are C7 referenced.
-    dx=data.actual_right_cm-data.decoded_right_cm;dy=data.actual_forward_cm-data.decoded_forward_cm
+    # Actual centers are arrow tails; CNN predictions are arrowheads.
+    # Arrow vectors show predicted minus actual, in C7-referenced coordinates.
+    dx=data.decoded_right_cm-data.actual_right_cm;dy=data.decoded_forward_cm-data.actual_forward_cm
     fig,(ax,body)=plt.subplots(1,2,figsize=(15,6.5),gridspec_kw={'width_ratios':[3.4,1]})
-    ax.quiver(data.decoded_right_cm,data.decoded_forward_cm,dx,dy,angles='xy',scale_units='xy',scale=1,color=BIAS_COLOR,width=.0028)
-    ax.scatter(data.decoded_right_cm,data.decoded_forward_cm,c=BIAS_COLOR,s=14,zorder=3)
+    ax.quiver(data.actual_right_cm,data.actual_forward_cm,dx,dy,angles='xy',scale_units='xy',scale=1,color=BIAS_COLOR,width=.0028)
+    ax.scatter(data.actual_right_cm,data.actual_forward_cm,c=BIAS_COLOR,s=14,zorder=3)
     ax.scatter(common[0],common[1],facecolors='none',edgecolors=START_COLOR,s=170,linewidths=2.5,zorder=5)
     ax.scatter(common[0],common[1],c=START_COLOR,marker='+',s=110,linewidths=2,zorder=6)
     ax.set(xlabel=RIGHT_LABEL,ylabel=FORWARD_LABEL,aspect='equal')
@@ -83,13 +83,13 @@ def main():
     body.scatter(common[0],common[1],facecolors='none',edgecolors=START_COLOR,s=90,linewidths=2)
     body.scatter(common[0],common[1],c=START_COLOR,marker='+',s=55,linewidths=1.5)
     body.set(title='View from above',xlabel='Right (cm)',ylabel='Forward (cm)',xlim=(-19,19),ylim=(-5,39),aspect='equal',xticks=[-15,0,15],yticks=[0,15,30]);body.grid(alpha=.18)
-    handles=[Line2D([],[],c=BIAS_COLOR,marker='>',markersize=8,label='Arrow: predicted center → actual center'),
-             Line2D([],[],ls='none',marker='o',color=BIAS_COLOR,label='Dot: CNN-predicted circle center'),
+    handles=[Line2D([],[],c=BIAS_COLOR,marker='>',markersize=8,label='Arrow tip: CNN-predicted center'),
+             Line2D([],[],ls='none',marker='o',color=BIAS_COLOR,label='Dot: actual circle center'),
              Line2D([],[],ls='none',marker='o',markerfacecolor='none',markeredgecolor=START_COLOR,markeredgewidth=2,markersize=9,label='Shared hand starting point'),
              Patch(facecolor='#dddddd',edgecolor='gray',label='Body / neck reference (0, 0)')]
     fig.suptitle('Where the CNN places each circle\n100 circles: predicted centers compared with actual centers',fontsize=15,y=.98)
     fig.legend(handles=handles,loc='lower center',bbox_to_anchor=(.5,.035),ncol=2,fontsize=10)
-    fig.text(.5,.005,'Each arrow goes from the CNN’s guess to the actual center. Left arrow = guess too far right. Grid positions are approximate.',ha='center',fontsize=9)
+    fig.text(.5,.005,'Each arrow goes from the actual center to the CNN’s prediction. Right arrow = prediction too far right. Grid positions are approximate.',ha='center',fontsize=9)
     fig.subplots_adjust(left=.075,right=.98,bottom=.23,top=.83,wspace=.22)
     fig.savefig(figs/'circle_position_centroid_bias.png',dpi=150,bbox_inches='tight');plt.close(fig)
     fig,ax=plt.subplots(figsize=(9,4),layout='constrained')
